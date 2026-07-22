@@ -1,0 +1,36 @@
+name: CI
+
+on:
+  pull_request:
+  # Appelé par deploy.yml sur push vers main : le déploiement attend que ce
+  # job soit vert. Pas de déclencheur `push` ici, sinon la CI tournerait deux
+  # fois pour le même commit.
+  workflow_call:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  checks:
+    name: Web (Next.js)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Tests
+        run: npm test
+
+      - name: Build
+        run: npm run build

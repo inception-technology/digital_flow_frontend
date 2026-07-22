@@ -1,36 +1,58 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Digital Flow — Frontend
 
-## Getting Started
+Interface mobile-first du workflow de publication musicale. Next.js 16
+(App Router), React 19, Tailwind v4.
 
-First, run the development server:
+## Les trois dépôts
+
+| Dépôt | Rôle |
+|---|---|
+| **digital_flow_frontend** (ici) | Interface — upload, visuels, validation |
+| [digital_flow_backend](https://github.com/inception-technology/digital_flow_backend) | API, OAuth, stockage, orchestration |
+| [music_visualizer](https://github.com/inception-technology/music_visualizer) | Moteur de rendu vidéo (FFmpeg) |
+
+## Démarrage local
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+echo "NEXT_PUBLIC_API_URL=http://localhost:8000" > .env.local
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+```bash
+npm install && npm run dev
+```
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+Le backend doit tourner en parallèle — voir son README.
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## Tests
 
-## Learn More
+```bash
+npm test
+```
 
-To learn more about Next.js, take a look at the following resources:
+Ils couvrent la validation audio côté navigateur (format, taille, durée), qui
+évite d'envoyer 50 Mo sur un réseau mobile pour recevoir un refus. Le backend
+reste l'autorité.
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Structure
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+```
+src/app/            Pages — upload (JALON 1), publications/[id] (JALON 2)
+src/components/     Composants clients
+src/lib/            Client API, validation audio, constantes du domaine
+```
 
-## Deploy on Vercel
+## Authentification
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+Le front ne détient **aucun** jeton. Le backend pilote le flow OAuth Google et
+dépose un cookie HttpOnly ; toutes les requêtes partent avec
+`credentials: "include"`.
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+Conséquence en production : front et API étant sur des domaines distincts, le
+backend doit tourner avec `SESSION_COOKIE_SAMESITE=none` et
+`SESSION_COOKIE_SECURE=true`, sinon la connexion échoue silencieusement.
+
+## Variables d'environnement
+
+| Variable | Rôle |
+|---|---|
+| `NEXT_PUBLIC_API_URL` | Adresse du backend. **Lue au build** — la modifier impose un redéploiement. |

@@ -1,0 +1,51 @@
+name: Deploy
+
+# Le déploiement part de GitHub, mais **seulement si la CI est verte**.
+#
+# Pourquoi pas l'intégration Git native de Vercel : son plan Hobby ne gère pas
+# les dépôts privés d'organisation (erreur 409 à la connexion).
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+jobs:
+  ci:
+    uses: ./.github/workflows/ci.yml
+
+  deploy:
+    name: Front (Vercel)
+    needs: ci
+    runs-on: ubuntu-latest
+    env:
+      # Identifiants de projet, pas des secrets : ils ne donnent aucun accès
+      # sans le jeton.
+      VERCEL_ORG_ID: team_0dwIMoiqrHSYaqQW6hLhOw2p
+      VERCEL_PROJECT_ID: prj_dWKQhFBcV3hqqd8I6x8A6gx03Dxh
+      VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+
+      - name: Install Vercel CLI
+        run: npm i -g vercel
+
+      - name: Deploy
+        run: |
+          # Sans jeton, on n'échoue pas : le dépôt reste utilisable par
+          # quelqu'un qui n'a pas accès aux secrets de déploiement.
+          if [ -z "$VERCEL_TOKEN" ]; then
+            echo "::warning::VERCEL_TOKEN absent — déploiement ignoré."
+            exit 0
+          fi
+          vercel pull --yes --environment=production --token="$VERCEL_TOKEN"
+          vercel build --prod --token="$VERCEL_TOKEN"
+          vercel deploy --prebuilt --prod --token="$VERCEL_TOKEN"
