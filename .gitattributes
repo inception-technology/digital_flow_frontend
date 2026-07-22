@@ -1,0 +1,11 @@
+# Normalise les fins de ligne : LF en dépôt et dans le working copy.
+# Évite les scripts shell en CRLF qui cassent le build Docker (CI Linux).
+* text=auto eol=lf
+
+*.png binary
+*.jpg binary
+*.ico binary
+*.svg text
+*.mp3 binary
+*.wav binary
+*.mp4 binary
