@@ -1,13 +1,14 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import {
   ApiError,
+  createPublication,
   fetchProfile,
   loginUrl,
   uploadAudio,
-  type AudioUpload,
   type Profile,
 } from "@/lib/api";
 import {
@@ -29,6 +30,7 @@ const FIELD =
   "rounded-lg border border-current/15 bg-transparent p-3 text-base";
 
 export default function UploadPage() {
+  const router = useRouter();
   const [profile, setProfile] = useState<Profile | null>(null);
   const [loadingProfile, setLoadingProfile] = useState(true);
 
@@ -42,7 +44,6 @@ export default function UploadPage() {
   const [uploading, setUploading] = useState(false);
   const [progress, setProgress] = useState(0);
   const [uploadError, setUploadError] = useState<string | null>(null);
-  const [result, setResult] = useState<AudioUpload | null>(null);
 
   // Hors du state : ne sert qu'au nettoyage, un re-rendu serait inutile.
   const currentObjectUrl = useRef<string | null>(null);
@@ -82,7 +83,6 @@ export default function UploadPage() {
 
   async function handleFile(file: File | undefined) {
     setUploadError(null);
-    setResult(null);
 
     if (!file) {
       replaceSelection(null);
@@ -125,16 +125,27 @@ export default function UploadPage() {
     setProgress(0);
 
     try {
-      setResult(await uploadAudio(selection.file, setProgress));
+      const upload = await uploadAudio(selection.file, setProgress);
+      const publication = await createPublication({
+        title: title.trim(),
+        artist_name: artistName.trim() || profile!.display_name,
+        style,
+        audio_key: upload.key,
+        // La durée retenue est celle mesurée par le backend, pas celle lue
+        // par le navigateur : c'est elle qui fera foi pour le rendu vidéo.
+        audio_duration_s: upload.duration_s,
+      });
+      router.push(`/publications/${publication.id}`);
     } catch (error) {
       setUploadError(
         error instanceof ApiError
           ? error.message
           : "L’envoi a échoué — réessayez.",
       );
-    } finally {
       setUploading(false);
     }
+    // Pas de `finally` : en cas de succès la navigation est en cours, réactiver
+    // le formulaire ferait clignoter le bouton avant que la page ne change.
   }
 
   const canContinue =
@@ -299,17 +310,6 @@ export default function UploadPage() {
           >
             {uploadError}
           </p>
-        )}
-
-        {result && (
-          <div role="status" className="rounded-lg border border-current/15 p-3 text-sm">
-            <p className="font-medium">Fichier envoyé.</p>
-            <p className="mt-1 opacity-70">
-              {formatDuration(result.duration_s)} ·{" "}
-              {formatBytes(result.size_bytes)}. La génération de l’image arrive
-              à l’étape suivante.
-            </p>
-          </div>
         )}
 
         <button
