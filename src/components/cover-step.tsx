@@ -6,6 +6,7 @@ import {
   ApiError,
   fetchPublication,
   generateCover,
+  startRender,
   uploadCover,
   type Publication,
 } from "@/lib/api";
@@ -20,14 +21,24 @@ const RATIO_LABELS: Record<string, string> = {
 // le plus vu, la pochette carrée le plus durable.
 const RATIO_ORDER = ["16:9", "1:1", "9:16"];
 
+const VIDEO_LABELS: Record<string, string> = {
+  landscape: "Format paysage — YouTube",
+  vertical: "Format vertical — Shorts et TikTok",
+};
+
+const VIDEO_ORDER = ["landscape", "vertical"];
+
 const ACTION =
   "rounded-lg border border-current/20 px-4 py-3 text-sm font-medium disabled:cursor-not-allowed disabled:opacity-40";
+
+type Busy = null | "generation" | "upload" | "render";
 
 export function CoverStep({ publicationId }: { publicationId: string }) {
   const [publication, setPublication] = useState<Publication | null>(null);
   const [loading, setLoading] = useState(true);
-  const [busy, setBusy] = useState<null | "generation" | "upload">(null);
+  const [busy, setBusy] = useState<Busy>(null);
   const [error, setError] = useState<string | null>(null);
+  const [prompt, setPrompt] = useState("");
 
   useEffect(() => {
     fetchPublication(publicationId)
@@ -42,10 +53,19 @@ export function CoverStep({ publicationId }: { publicationId: string }) {
       .finally(() => setLoading(false));
   }, [publicationId]);
 
-  async function run(
-    kind: "generation" | "upload",
-    action: () => Promise<Publication>,
-  ) {
+  // Le rendu vidéo dure plusieurs minutes côté serveur : tant que la
+  // publication est en « rendering », on interroge l'état régulièrement
+  // jusqu'à « ready » (vidéos prêtes) ou « error ».
+  const status = publication?.status;
+  useEffect(() => {
+    if (status !== "rendering") return;
+    const timer = setInterval(() => {
+      fetchPublication(publicationId).then(setPublication).catch(() => {});
+    }, 4000);
+    return () => clearInterval(timer);
+  }, [status, publicationId]);
+
+  async function run(kind: Busy, action: () => Promise<Publication>) {
     setBusy(kind);
     setError(null);
     try {
@@ -79,6 +99,34 @@ export function CoverStep({ publicationId }: { publicationId: string }) {
   const hasCovers = covers.length > 0;
   const noGenerationsLeft = publication.remaining_generations === 0;
 
+  const videos = [...publication.videos].sort(
+    (a, b) =>
+      VIDEO_ORDER.indexOf(a.output_format) -
+      VIDEO_ORDER.indexOf(b.output_format),
+  );
+  const hasVideos = videos.length > 0;
+  const isRendering = publication.status === "rendering";
+
+  // Un seul champ, réutilisé selon qu'on part de zéro ou qu'on regénère : les
+  // deux emplacements sont mutuellement exclusifs (pochette absente / présente).
+  const promptField = (
+    <label className="flex flex-col gap-1 text-sm">
+      <span className="font-medium">Direction créative (optionnel)</span>
+      <textarea
+        value={prompt}
+        onChange={(event) => setPrompt(event.target.value)}
+        disabled={busy !== null}
+        rows={2}
+        maxLength={1000}
+        placeholder="Ex. un loup solitaire sous une lune rouge, brume légère"
+        className="rounded-lg border border-current/20 bg-transparent px-3 py-2 disabled:opacity-40"
+      />
+      <span className="text-xs opacity-60">
+        Remplace l’ambiance déduite du style. Le sujet reste centré, sans texte.
+      </span>
+    </label>
+  );
+
   return (
     <main className="mx-auto w-full max-w-md flex-1 p-6">
       <header className="mb-8">
@@ -95,9 +143,12 @@ export function CoverStep({ publicationId }: { publicationId: string }) {
             Une pochette va être créée à partir du titre et du style, puis
             déclinée automatiquement dans les trois formats.
           </p>
+          {promptField}
           <button
             type="button"
-            onClick={() => run("generation", () => generateCover(publication.id))}
+            onClick={() =>
+              run("generation", () => generateCover(publication.id, prompt))
+            }
             disabled={busy !== null}
             className="rounded-lg bg-foreground px-4 py-3 font-medium text-background disabled:opacity-40"
           >
@@ -152,56 +203,104 @@ export function CoverStep({ publicationId }: { publicationId: string }) {
         </p>
       )}
 
-      <div className="flex flex-col gap-3">
-        {hasCovers && (
-          <button
-            type="button"
-            onClick={() => run("generation", () => generateCover(publication.id))}
-            disabled={busy !== null || noGenerationsLeft}
-            className={ACTION}
-          >
-            {busy === "generation"
-              ? "Création en cours…"
-              : noGenerationsLeft
-                ? "Plus de regénération disponible"
-                : `Regénérer (${publication.remaining_generations} restantes)`}
-          </button>
-        )}
-
-        <label className={`${ACTION} cursor-pointer text-center`}>
-          {busy === "upload" ? "Envoi…" : "Utiliser ma propre image"}
-          <input
-            type="file"
-            accept="image/png,image/jpeg,image/webp"
-            className="hidden"
-            disabled={busy !== null}
-            onChange={(event) => {
-              const file = event.target.files?.[0];
-              event.target.value = "";
-              if (file) run("upload", () => uploadCover(publication.id, file));
-            }}
-          />
-        </label>
-
-        <button
-          type="button"
-          disabled={!hasCovers}
-          title={
-            hasCovers
-              ? "L’étape suivante n’est pas encore disponible"
-              : undefined
-          }
-          className="rounded-lg bg-foreground px-4 py-3 font-medium text-background disabled:cursor-not-allowed disabled:opacity-40"
+      {!hasVideos && publication.render_error && (
+        <p
+          role="alert"
+          className="mb-4 text-sm font-medium text-red-700 dark:text-red-400"
         >
-          J’accepte ces visuels →
-        </button>
+          Le rendu a échoué : {publication.render_error} — relancez-le.
+        </p>
+      )}
 
-        {hasCovers && (
-          <p className="text-xs opacity-60">
-            L’étape suivante — rendu vidéo et textes — arrive prochainement.
-          </p>
-        )}
-      </div>
+      {hasVideos ? (
+        <section className="flex flex-col gap-4">
+          <div>
+            <h2 className="text-lg font-semibold">Vos vidéos sont prêtes</h2>
+            <p className="mt-1 text-sm opacity-60">
+              Téléchargez chaque format et publiez-le sur la plateforme
+              correspondante.
+            </p>
+          </div>
+          {videos.map((video) => (
+            <div key={video.output_format} className="flex flex-col gap-2">
+              <p className="text-sm font-medium">
+                {VIDEO_LABELS[video.output_format] ?? video.output_format}
+              </p>
+              <video
+                src={video.url}
+                controls
+                className="w-full rounded-lg border border-current/15 bg-black"
+              />
+              <a
+                href={video.url}
+                download
+                className={`${ACTION} text-center`}
+              >
+                Télécharger cette vidéo
+              </a>
+            </div>
+          ))}
+        </section>
+      ) : (
+        <div className="flex flex-col gap-3">
+          {hasCovers && !isRendering && (
+            <>
+              {!noGenerationsLeft && promptField}
+              <button
+                type="button"
+                onClick={() =>
+                  run("generation", () => generateCover(publication.id, prompt))
+                }
+                disabled={busy !== null || noGenerationsLeft}
+                className={ACTION}
+              >
+                {busy === "generation"
+                  ? "Création en cours…"
+                  : noGenerationsLeft
+                    ? "Plus de regénération disponible"
+                    : `Regénérer (${publication.remaining_generations} restantes)`}
+              </button>
+
+              <label className={`${ACTION} cursor-pointer text-center`}>
+                {busy === "upload" ? "Envoi…" : "Utiliser ma propre image"}
+                <input
+                  type="file"
+                  accept="image/png,image/jpeg,image/webp"
+                  className="hidden"
+                  disabled={busy !== null}
+                  onChange={(event) => {
+                    const file = event.target.files?.[0];
+                    event.target.value = "";
+                    if (file)
+                      run("upload", () => uploadCover(publication.id, file));
+                  }}
+                />
+              </label>
+            </>
+          )}
+
+          {isRendering ? (
+            <div className="rounded-lg border border-current/15 p-4">
+              <p className="text-sm font-medium">Rendu des vidéos en cours…</p>
+              <p className="mt-1 text-xs opacity-60">
+                Le montage des deux formats prend quelques minutes. Vous pouvez
+                laisser cette page ouverte — elle se met à jour toute seule.
+              </p>
+            </div>
+          ) : (
+            <button
+              type="button"
+              onClick={() => run("render", () => startRender(publication.id))}
+              disabled={!hasCovers || busy !== null}
+              className="rounded-lg bg-foreground px-4 py-3 font-medium text-background disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              {busy === "render"
+                ? "Lancement du rendu…"
+                : "J’accepte ces visuels — lancer les vidéos →"}
+            </button>
+          )}
+        </div>
+      )}
     </main>
   );
 }

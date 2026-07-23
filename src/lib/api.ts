@@ -32,6 +32,11 @@ export type CoverFormat = {
   height: number;
 };
 
+export type VideoFormat = {
+  output_format: string;
+  url: string;
+};
+
 export type Publication = {
   id: string;
   title: string;
@@ -42,6 +47,8 @@ export type Publication = {
   image_generations: number;
   remaining_generations: number;
   covers: CoverFormat[];
+  videos: VideoFormat[];
+  render_error: string | null;
 };
 
 export const loginUrl = `${API_URL}/api/auth/google/login`;
@@ -92,8 +99,29 @@ export function fetchPublication(id: string): Promise<Publication> {
   return request(`/api/publications/${id}`);
 }
 
-export function generateCover(id: string): Promise<Publication> {
-  return request(`/api/publications/${id}/image`, { method: "POST" });
+/**
+ * Génère une pochette. `prompt` est une direction créative libre optionnelle :
+ * si fournie, elle remplace l'ambiance dérivée du style, en gardant les
+ * garde-fous du service (sujet centré, aucun texte).
+ */
+export function generateCover(
+  id: string,
+  prompt?: string,
+): Promise<Publication> {
+  const trimmed = prompt?.trim();
+  return request(`/api/publications/${id}/image`, {
+    method: "POST",
+    body: JSON.stringify({ prompt: trimmed || null }),
+  });
+}
+
+/**
+ * Lance le rendu des vidéos (JALON 3). Rend la main aussitôt : la publication
+ * passe en `rendering`, puis le front interroge `fetchPublication` jusqu'à
+ * `ready` (vidéos disponibles) ou `error` (`render_error` renseigné).
+ */
+export function startRender(id: string): Promise<Publication> {
+  return request(`/api/publications/${id}/video`, { method: "POST" });
 }
 
 export async function uploadCover(id: string, file: File): Promise<Publication> {
