@@ -1,9 +1,15 @@
 import type { NextConfig } from "next";
 
 // Origine du backend, proxifiée derrière ce même domaine (voir `rewrites`).
-// En local, le backend tourne sur :8000 ; en production, Vercel fournit
-// `BACKEND_ORIGIN` (l'URL publique Railway).
-const BACKEND_ORIGIN = process.env.BACKEND_ORIGIN ?? "http://localhost:8000";
+// En production, l'URL publique Railway (pas un secret : c'est l'endpoint
+// de l'API, déjà visible dans les requêtes réseau) ; en local, le backend
+// sur :8000. `BACKEND_ORIGIN` reste une échappatoire (`||` pour ignorer une
+// valeur vide).
+const BACKEND_ORIGIN =
+  process.env.BACKEND_ORIGIN ||
+  (process.env.NODE_ENV === "production"
+    ? "https://digital-flow-media.up.railway.app"
+    : "http://localhost:8000");
 
 const nextConfig: NextConfig = {
   reactCompiler: true,
