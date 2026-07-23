@@ -5,8 +5,11 @@
  * front ne détient aucun jeton, d'où le `credentials: "include"` systématique.
  */
 
-export const API_URL =
-  process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
+// Par défaut, origine relative : le front appelle `/api/...` sur son propre
+// domaine, et un rewrite Next (voir next.config.ts) proxifie vers le backend.
+// Le cookie de session reste ainsi first-party — condition du login mobile.
+// `NEXT_PUBLIC_API_URL` reste une échappatoire (appel direct au backend).
+export const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "";
 
 export type Profile = {
   id: string;
