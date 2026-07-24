@@ -54,6 +54,14 @@ export type Publication = {
   render_error: string | null;
 };
 
+/** Ligne de la liste des publications — sans média, donc sans URL signée. */
+export type PublicationSummary = {
+  id: string;
+  title: string;
+  status: string;
+  created_at: string;
+};
+
 export const loginUrl = `${API_URL}/api/auth/google/login`;
 
 export class ApiError extends Error {}
@@ -100,6 +108,11 @@ export function createPublication(draft: {
 
 export function fetchPublication(id: string): Promise<Publication> {
   return request(`/api/publications/${id}`);
+}
+
+/** Publications du créateur, la plus récente d'abord. */
+export function fetchPublications(): Promise<PublicationSummary[]> {
+  return request("/api/publications");
 }
 
 /**
