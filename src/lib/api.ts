@@ -141,6 +141,27 @@ export async function uploadCover(id: string, file: File): Promise<Publication> 
   return response.json();
 }
 
+/**
+ * Met à jour le nom d'artiste. Une chaîne vide l'efface — le nom du compte
+ * Google reprend alors la main.
+ */
+export function updateArtistName(artistName: string): Promise<Profile> {
+  return request("/api/auth/me", {
+    method: "PATCH",
+    body: JSON.stringify({ artist_name: artistName }),
+  });
+}
+
+/** Ferme la session : le backend efface le cookie. */
+export async function logout(): Promise<void> {
+  const response = await fetch(`${API_URL}/api/auth/logout`, {
+    method: "POST",
+    credentials: "include",
+  });
+
+  if (!response.ok) throw new ApiError(await readDetail(response));
+}
+
 /** Profil courant, ou `null` si la session est absente ou expirée. */
 export async function fetchProfile(): Promise<Profile | null> {
   const response = await fetch(`${API_URL}/api/auth/me`, {

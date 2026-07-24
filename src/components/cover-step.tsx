@@ -8,6 +8,7 @@ import {
   generateCover,
   startRender,
   uploadCover,
+  type CoverFormat,
   type Publication,
 } from "@/lib/api";
 
@@ -39,6 +40,17 @@ export function CoverStep({ publicationId }: { publicationId: string }) {
   const [busy, setBusy] = useState<Busy>(null);
   const [error, setError] = useState<string | null>(null);
   const [prompt, setPrompt] = useState("");
+  const [enlarged, setEnlarged] = useState<CoverFormat | null>(null);
+
+  // Échap ferme l'aperçu agrandi — au clavier comme au clic sur le fond.
+  useEffect(() => {
+    if (!enlarged) return;
+    const close = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setEnlarged(null);
+    };
+    window.addEventListener("keydown", close);
+    return () => window.removeEventListener("keydown", close);
+  }, [enlarged]);
 
   useEffect(() => {
     fetchPublication(publicationId)
@@ -163,35 +175,62 @@ export function CoverStep({ publicationId }: { publicationId: string }) {
       )}
 
       {hasCovers && (
-        // Défilement horizontal plutôt qu'une grille : sur téléphone, trois
-        // aperçus côte à côte seraient illisibles.
-        <ul className="-mx-6 mb-6 flex snap-x snap-mandatory gap-4 overflow-x-auto px-6 pb-2">
+        // Empilement vertical : sur téléphone, un défilement horizontal
+        // cachait les visuels suivants. Chaque aperçu s'agrandit au clic.
+        <ul className="mb-6 flex flex-col gap-4">
           {covers.map((cover) => (
-            <li
-              key={cover.ratio}
-              className="flex w-56 shrink-0 snap-center flex-col gap-2"
-            >
-              <div className="flex items-center justify-center rounded-lg border border-current/15 bg-current/5 p-2">
+            <li key={cover.ratio} className="flex flex-col gap-2">
+              <button
+                type="button"
+                onClick={() => setEnlarged(cover)}
+                aria-label={`Agrandir ${RATIO_LABELS[cover.ratio] ?? cover.ratio}`}
+                className="flex items-center justify-center rounded-lg border border-current/15 bg-current/5 p-2"
+              >
                 {/* Image distante signée et de durée courte : le pipeline
                     d'optimisation de Next n'apporterait rien ici. */}
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
                   src={cover.url}
                   alt={`Aperçu ${RATIO_LABELS[cover.ratio] ?? cover.ratio}`}
-                  className="max-h-56 w-auto rounded"
+                  className="max-h-80 w-auto rounded"
                 />
-              </div>
+              </button>
               <div>
                 <p className="text-sm font-medium">
                   {RATIO_LABELS[cover.ratio] ?? cover.ratio}
                 </p>
                 <p className="text-xs tabular-nums opacity-60">
-                  {cover.ratio} · {cover.width}×{cover.height}
+                  {cover.ratio} · {cover.width}×{cover.height} · appuyez pour
+                  agrandir
                 </p>
               </div>
             </li>
           ))}
         </ul>
+      )}
+
+      {enlarged && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-label={`Aperçu agrandi — ${RATIO_LABELS[enlarged.ratio] ?? enlarged.ratio}`}
+          onClick={() => setEnlarged(null)}
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 p-4"
+        >
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={enlarged.url}
+            alt={`Aperçu ${RATIO_LABELS[enlarged.ratio] ?? enlarged.ratio}`}
+            className="max-h-full max-w-full rounded object-contain"
+          />
+          <button
+            type="button"
+            onClick={() => setEnlarged(null)}
+            className="absolute right-4 top-4 rounded-lg bg-white/15 px-3 py-2 text-sm font-medium text-white backdrop-blur"
+          >
+            Fermer
+          </button>
+        </div>
       )}
 
       {error && (

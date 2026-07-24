@@ -20,14 +20,24 @@ export function NavBar() {
         <Link href="/" className="flex items-center gap-2 font-semibold">
           <span aria-hidden>🎵</span> Digital Flow
         </Link>
-        {!onHome && (
+        <div className="flex items-center gap-2">
+          {!onHome && (
+            <Link
+              href="/"
+              className="rounded-lg border border-current/20 px-3 py-1.5 text-sm font-medium"
+            >
+              ← Accueil
+            </Link>
+          )}
           <Link
-            href="/"
-            className="rounded-lg border border-current/20 px-3 py-1.5 text-sm font-medium"
+            href="/parametres"
+            aria-label="Paramètres"
+            title="Paramètres"
+            className="rounded-lg border border-current/20 px-3 py-1.5 text-sm"
           >
-            ← Accueil
+            <span aria-hidden>⚙️</span>
           </Link>
-        )}
+        </div>
       </nav>
     </header>
   );
