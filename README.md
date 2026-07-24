@@ -1,4 +1,4 @@
-# Digital Flow — Frontend
+# Digital Flow Media — Frontend
 
 Interface mobile-first du workflow de publication musicale. Next.js 16
 (App Router), React 19, Tailwind v4.

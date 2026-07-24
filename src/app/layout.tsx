@@ -9,7 +9,7 @@ const geistSans = Geist({
 });
 
 export const metadata: Metadata = {
-  title: "Digital Flow",
+  title: "Digital Flow Media",
   description:
     "Upload audio, visuels IA et publication automatique sur YouTube et SoundCloud.",
 };

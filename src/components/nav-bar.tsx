@@ -18,7 +18,7 @@ export function NavBar() {
     <header className="sticky top-0 z-10 border-b border-current/10 bg-background/80 backdrop-blur">
       <nav className="mx-auto flex w-full max-w-md items-center justify-between p-4">
         <Link href="/" className="flex items-center gap-2 font-semibold">
-          <span aria-hidden>🎵</span> Digital Flow
+          <span aria-hidden>🎵</span> Digital Flow Media
         </Link>
         <div className="flex items-center gap-2">
           {!onHome && (
