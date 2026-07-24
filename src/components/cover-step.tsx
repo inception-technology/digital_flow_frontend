@@ -40,6 +40,8 @@ export function CoverStep({ publicationId }: { publicationId: string }) {
   const [busy, setBusy] = useState<Busy>(null);
   const [error, setError] = useState<string | null>(null);
   const [prompt, setPrompt] = useState("");
+  const [useTitle, setUseTitle] = useState(true);
+  const [useStyle, setUseStyle] = useState(true);
   const [enlarged, setEnlarged] = useState<CoverFormat | null>(null);
 
   // Échap ferme l'aperçu agrandi — au clavier comme au clic sur le fond.
@@ -139,6 +141,41 @@ export function CoverStep({ publicationId }: { publicationId: string }) {
     </label>
   );
 
+  // Décocher retire l'élément du prompt : un titre très évocateur ou un style
+  // au parti pris fort tirent l'image dans une direction non voulue.
+  const promptSources = (
+    <fieldset className="flex flex-col gap-2">
+      <legend className="mb-1 text-sm font-medium">
+        À prendre en compte pour l’image
+      </legend>
+      <label className="flex items-center gap-2 text-sm">
+        <input
+          type="checkbox"
+          checked={useTitle}
+          onChange={(event) => setUseTitle(event.target.checked)}
+          disabled={busy !== null}
+          className="h-4 w-4"
+        />
+        Le titre — « {publication.title} »
+      </label>
+      <label className="flex items-center gap-2 text-sm">
+        <input
+          type="checkbox"
+          checked={useStyle}
+          onChange={(event) => setUseStyle(event.target.checked)}
+          disabled={busy !== null || prompt.trim().length > 0}
+          className="h-4 w-4"
+        />
+        Le style — {publication.style}
+      </label>
+      {prompt.trim().length > 0 && (
+        <span className="text-xs opacity-60">
+          Votre direction créative remplace déjà le style.
+        </span>
+      )}
+    </fieldset>
+  );
+
   return (
     <main className="mx-auto w-full max-w-md flex-1 p-6">
       <header className="mb-8">
@@ -156,10 +193,13 @@ export function CoverStep({ publicationId }: { publicationId: string }) {
             déclinée automatiquement dans les trois formats.
           </p>
           {promptField}
+          {promptSources}
           <button
             type="button"
             onClick={() =>
-              run("generation", () => generateCover(publication.id, prompt))
+              run("generation", () =>
+                generateCover(publication.id, { prompt, useTitle, useStyle }),
+              )
             }
             disabled={busy !== null}
             className="rounded-lg bg-foreground px-4 py-3 font-medium text-background disabled:opacity-40"
@@ -285,10 +325,13 @@ export function CoverStep({ publicationId }: { publicationId: string }) {
           {hasCovers && !isRendering && (
             <>
               {!noGenerationsLeft && promptField}
+              {!noGenerationsLeft && promptSources}
               <button
                 type="button"
                 onClick={() =>
-                  run("generation", () => generateCover(publication.id, prompt))
+                  run("generation", () =>
+                generateCover(publication.id, { prompt, useTitle, useStyle }),
+              )
                 }
                 disabled={busy !== null || noGenerationsLeft}
                 className={ACTION}

@@ -116,18 +116,25 @@ export function fetchPublications(): Promise<PublicationSummary[]> {
 }
 
 /**
- * Génère une pochette. `prompt` est une direction créative libre optionnelle :
- * si fournie, elle remplace l'ambiance dérivée du style, en gardant les
- * garde-fous du service (sujet centré, aucun texte).
+ * Génère une pochette.
+ *
+ * `prompt` est une direction créative libre : si fournie, elle remplace
+ * l'ambiance dérivée du style, en gardant les garde-fous du service (sujet
+ * centré, aucun texte). `useTitle` et `useStyle` retirent le titre ou le style
+ * du prompt quand ils tirent l'image dans une direction non voulue.
  */
 export function generateCover(
   id: string,
-  prompt?: string,
+  options: { prompt?: string; useTitle?: boolean; useStyle?: boolean } = {},
 ): Promise<Publication> {
-  const trimmed = prompt?.trim();
+  const trimmed = options.prompt?.trim();
   return request(`/api/publications/${id}/image`, {
     method: "POST",
-    body: JSON.stringify({ prompt: trimmed || null }),
+    body: JSON.stringify({
+      prompt: trimmed || null,
+      use_title: options.useTitle ?? true,
+      use_style: options.useStyle ?? true,
+    }),
   });
 }
 
