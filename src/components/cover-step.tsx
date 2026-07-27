@@ -16,6 +16,7 @@ import {
   type Privacy,
   type Publication,
 } from "@/lib/api";
+import { checkCoverDimensions, readImageSize } from "@/lib/image";
 
 const RATIO_LABELS: Record<string, string> = {
   "16:9": "Miniature YouTube",
@@ -227,6 +228,40 @@ export function CoverStep({ publicationId }: { publicationId: string }) {
     </fieldset>
   );
 
+  // Un bouton d'import réutilisé sur l'écran initial et parmi les actions. La
+  // dimension est vérifiée avant l'envoi : trop petite, l'image donnerait des
+  // variantes floues une fois rognée dans les trois formats.
+  const coverUpload = (label: string) => (
+    <label className={`${ACTION} cursor-pointer text-center`}>
+      {busy === "upload" ? "Envoi…" : label}
+      <input
+        type="file"
+        accept="image/png,image/jpeg,image/webp"
+        className="hidden"
+        disabled={busy !== null}
+        onChange={async (event) => {
+          const file = event.target.files?.[0];
+          event.target.value = "";
+          if (!file) return;
+          setError(null);
+          let size: { width: number; height: number };
+          try {
+            size = await readImageSize(file);
+          } catch {
+            setError("Image illisible — utilisez un png, un jpg ou un webp.");
+            return;
+          }
+          const check = checkCoverDimensions(size.width, size.height);
+          if (!check.ok) {
+            setError(check.message);
+            return;
+          }
+          run("upload", () => uploadCover(publication.id, file));
+        }}
+      />
+    </label>
+  );
+
   return (
     <main className="mx-auto w-full max-w-md flex-1 p-6">
       <header className="mb-8">
@@ -261,6 +296,16 @@ export function CoverStep({ publicationId }: { publicationId: string }) {
           </button>
           <p className="text-xs opacity-60">
             Cela prend une trentaine de secondes.
+          </p>
+
+          <div className="flex items-center gap-3 text-xs opacity-50">
+            <span className="h-px flex-1 bg-current/20" />
+            ou
+            <span className="h-px flex-1 bg-current/20" />
+          </div>
+          {coverUpload("Importer ma propre image")}
+          <p className="text-xs opacity-60">
+            png, jpg ou webp · au moins 1080×1080 px pour les trois formats.
           </p>
         </div>
       )}
@@ -448,21 +493,7 @@ export function CoverStep({ publicationId }: { publicationId: string }) {
                     : `Regénérer (${publication.remaining_generations} restantes)`}
               </button>
 
-              <label className={`${ACTION} cursor-pointer text-center`}>
-                {busy === "upload" ? "Envoi…" : "Utiliser ma propre image"}
-                <input
-                  type="file"
-                  accept="image/png,image/jpeg,image/webp"
-                  className="hidden"
-                  disabled={busy !== null}
-                  onChange={(event) => {
-                    const file = event.target.files?.[0];
-                    event.target.value = "";
-                    if (file)
-                      run("upload", () => uploadCover(publication.id, file));
-                  }}
-                />
-              </label>
+              {coverUpload("Utiliser ma propre image")}
             </>
           )}
 
