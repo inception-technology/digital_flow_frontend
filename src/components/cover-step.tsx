@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 
 import {
   ApiError,
+  archivePublication,
   deletePublication,
   fetchPublication,
   generateCover,
@@ -42,9 +43,13 @@ export function CoverStep({ publicationId }: { publicationId: string }) {
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState<Busy>(null);
   const [error, setError] = useState<string | null>(null);
-  // Suppression : géré à part du reste (`busy`), avec sa propre confirmation.
-  const [confirmingDelete, setConfirmingDelete] = useState(false);
-  const [deleting, setDeleting] = useState(false);
+  // Suppression / archivage : gérés à part du reste (`busy`), avec confirmation.
+  // Un projet publié s'archive (le morceau vit sur les plateformes) ; les
+  // autres se suppriment.
+  const [pendingAction, setPendingAction] = useState<null | "delete" | "archive">(
+    null,
+  );
+  const [working, setWorking] = useState(false);
   const [prompt, setPrompt] = useState("");
   const [useTitle, setUseTitle] = useState(true);
   const [useStyle, setUseStyle] = useState(true);
@@ -101,22 +106,24 @@ export function CoverStep({ publicationId }: { publicationId: string }) {
     }
   }
 
-  async function handleDelete() {
-    setDeleting(true);
+  async function handleConfirm() {
+    if (!pendingAction) return;
+    setWorking(true);
     setError(null);
     try {
-      await deletePublication(publicationId);
-      // Retour à l'accueil : la publication n'existe plus, rester ici afficherait
-      // une erreur au prochain rafraîchissement.
+      if (pendingAction === "delete") await deletePublication(publicationId);
+      else await archivePublication(publicationId);
+      // Retour à l'accueil : la publication a quitté la liste active, rester ici
+      // afficherait un projet supprimé ou archivé.
       router.replace("/");
     } catch (caught) {
       setError(
         caught instanceof ApiError
           ? caught.message
-          : "La suppression a échoué — réessayez.",
+          : "L’opération a échoué — réessayez.",
       );
-      setDeleting(false);
-      setConfirmingDelete(false);
+      setWorking(false);
+      setPendingAction(null);
     }
     // Pas de `finally` : en cas de succès la navigation est en cours.
   }
@@ -146,6 +153,8 @@ export function CoverStep({ publicationId }: { publicationId: string }) {
   );
   const hasVideos = videos.length > 0;
   const isRendering = publication.status === "rendering";
+  // Un projet publié s'archive ; les autres se suppriment.
+  const isPublished = publication.status === "published";
 
   // Un seul champ, réutilisé selon qu'on part de zéro ou qu'on regénère : les
   // deux emplacements sont mutuellement exclusifs (pochette absente / présente).
@@ -411,49 +420,88 @@ export function CoverStep({ publicationId }: { publicationId: string }) {
       )}
 
       <footer className="mt-12 border-t border-current/10 pt-4">
-        <button
-          type="button"
-          onClick={() => setConfirmingDelete(true)}
-          disabled={busy !== null || deleting}
-          className="text-sm font-medium text-red-700 disabled:opacity-40 dark:text-red-400"
-        >
-          Supprimer ce projet
-        </button>
+        {isPublished ? (
+          <button
+            type="button"
+            onClick={() => setPendingAction("archive")}
+            disabled={busy !== null || working}
+            className="text-sm font-medium opacity-70 hover:opacity-100 disabled:opacity-40"
+          >
+            Archiver ce projet
+          </button>
+        ) : (
+          <button
+            type="button"
+            onClick={() => setPendingAction("delete")}
+            disabled={busy !== null || working}
+            className="text-sm font-medium text-red-700 disabled:opacity-40 dark:text-red-400"
+          >
+            Supprimer ce projet
+          </button>
+        )}
       </footer>
 
-      {confirmingDelete && (
-        // Toast de confirmation : une suppression est irréversible, on ne
-        // l'exécute qu'après un second geste explicite.
+      {pendingAction && (
+        // Toast de confirmation : on n'exécute l'action qu'après un second geste
+        // explicite (une suppression est irréversible, un archivage retire de la
+        // liste active).
         <div
           role="alertdialog"
           aria-modal="true"
-          aria-label="Confirmer la suppression"
+          aria-label={
+            pendingAction === "delete"
+              ? "Confirmer la suppression"
+              : "Confirmer l’archivage"
+          }
           className="fixed inset-x-0 bottom-0 z-50 flex justify-center p-4"
         >
           <div className="flex w-full max-w-md flex-col gap-3 rounded-xl border border-current/15 bg-background p-4 shadow-lg">
             <div>
-              <p className="text-sm font-medium">Supprimer ce projet ?</p>
+              <p className="text-sm font-medium">
+                {pendingAction === "delete"
+                  ? "Supprimer ce projet ?"
+                  : "Archiver ce projet ?"}
+              </p>
               <p className="mt-1 text-xs opacity-60">
-                « {publication.title} » et ses visuels et vidéos seront
-                définitivement supprimés. Cette action est irréversible.
+                {pendingAction === "delete" ? (
+                  <>
+                    « {publication.title} » et ses visuels et vidéos seront
+                    définitivement supprimés. Cette action est irréversible.
+                  </>
+                ) : (
+                  <>
+                    « {publication.title} » quittera la liste de vos projets. Le
+                    morceau reste en ligne sur les plateformes.
+                  </>
+                )}
               </p>
             </div>
             <div className="flex gap-2">
               <button
                 type="button"
-                onClick={() => setConfirmingDelete(false)}
-                disabled={deleting}
+                onClick={() => setPendingAction(null)}
+                disabled={working}
                 className="flex-1 rounded-lg border border-current/20 px-4 py-2.5 text-sm font-medium disabled:opacity-40"
               >
                 Annuler
               </button>
               <button
                 type="button"
-                onClick={handleDelete}
-                disabled={deleting}
-                className="flex-1 rounded-lg bg-red-600 px-4 py-2.5 text-sm font-medium text-white disabled:opacity-60"
+                onClick={handleConfirm}
+                disabled={working}
+                className={
+                  pendingAction === "delete"
+                    ? "flex-1 rounded-lg bg-red-600 px-4 py-2.5 text-sm font-medium text-white disabled:opacity-60"
+                    : "flex-1 rounded-lg bg-foreground px-4 py-2.5 text-sm font-medium text-background disabled:opacity-60"
+                }
               >
-                {deleting ? "Suppression…" : "Supprimer"}
+                {working
+                  ? pendingAction === "delete"
+                    ? "Suppression…"
+                    : "Archivage…"
+                  : pendingAction === "delete"
+                    ? "Supprimer"
+                    : "Archiver"}
               </button>
             </div>
           </div>

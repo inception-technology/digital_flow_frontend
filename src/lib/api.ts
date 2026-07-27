@@ -52,6 +52,7 @@ export type Publication = {
   covers: CoverFormat[];
   videos: VideoFormat[];
   render_error: string | null;
+  archived: boolean;
 };
 
 /** Ligne de la liste des publications — sans média, donc sans URL signée. */
@@ -147,7 +148,7 @@ export function startRender(id: string): Promise<Publication> {
   return request(`/api/publications/${id}/video`, { method: "POST" });
 }
 
-/** Supprime la publication et ses médias. Irréversible. */
+/** Supprime la publication et ses médias. Irréversible. Refusé si publié. */
 export async function deletePublication(id: string): Promise<void> {
   const response = await fetch(`${API_URL}/api/publications/${id}`, {
     method: "DELETE",
@@ -155,6 +156,14 @@ export async function deletePublication(id: string): Promise<void> {
   });
 
   if (!response.ok) throw new ApiError(await readDetail(response));
+}
+
+/**
+ * Archive la publication : elle quitte la liste active sans être supprimée.
+ * C'est le pendant de la suppression pour un projet publié.
+ */
+export function archivePublication(id: string): Promise<Publication> {
+  return request(`/api/publications/${id}/archive`, { method: "POST" });
 }
 
 export async function uploadCover(id: string, file: File): Promise<Publication> {

@@ -180,7 +180,7 @@ export default function HomePage() {
                   <div className="min-w-0 flex-1">
                     <Link
                       href={`/publications/${publication.id}`}
-                      className="block truncate font-medium underline-offset-2 hover:underline"
+                      className="block cursor-pointer truncate font-medium underline-offset-2 hover:underline"
                     >
                       {publication.title}
                     </Link>
