@@ -47,6 +47,18 @@ export type CoverSet = {
   covers: CoverFormat[];
 };
 
+/**
+ * Textes rédigés par l'agent Claude, éditables au JALON 3. Champs nuls tant que
+ * l'agent n'a pas tourné (les hashtags sont alors des tableaux vides).
+ */
+export type PublicationMetadata = {
+  youtube_title: string | null;
+  youtube_description: string | null;
+  youtube_tags: string[];
+  soundcloud_description: string | null;
+  soundcloud_tags: string[];
+};
+
 export type Publication = {
   id: string;
   title: string;
@@ -62,6 +74,7 @@ export type Publication = {
   render_error: string | null;
   archived: boolean;
   youtube_url: string | null;
+  metadata: PublicationMetadata;
 };
 
 export type Privacy = "private" | "unlisted" | "public";
@@ -177,6 +190,32 @@ export function generateCover(
  */
 export function startRender(id: string): Promise<Publication> {
   return request(`/api/publications/${id}/video`, { method: "POST" });
+}
+
+/**
+ * Rédige (ou régénère) les métadonnées via l'agent Claude — titre et
+ * description YouTube, description SoundCloud, hashtags par plateforme. Écrase
+ * le jeu courant : c'est le bouton « régénérer » du JALON 3.
+ */
+export function generateMetadata(id: string): Promise<Publication> {
+  return request(`/api/publications/${id}/metadata`, { method: "POST" });
+}
+
+/** Enregistre les éditions manuelles des métadonnées (champs fournis seulement). */
+export function updateMetadata(
+  id: string,
+  patch: {
+    youtube_title?: string;
+    youtube_description?: string;
+    youtube_tags?: string[];
+    soundcloud_description?: string;
+    soundcloud_tags?: string[];
+  },
+): Promise<Publication> {
+  return request(`/api/publications/${id}/metadata`, {
+    method: "PATCH",
+    body: JSON.stringify(patch),
+  });
 }
 
 /**

@@ -14,12 +14,15 @@ import {
   fetchPublication,
   fetchRenderStatus,
   generateCover,
+  generateMetadata,
   publishYoutube,
   startRender,
+  updateMetadata,
   uploadCover,
   type CoverFormat,
   type Privacy,
   type Publication,
+  type PublicationMetadata,
 } from "@/lib/api";
 import { checkCoverDimensions, readImageSize } from "@/lib/image";
 
@@ -48,7 +51,42 @@ function formatElapsed(seconds: number): string {
   return `${minutes}:${String(seconds % 60).padStart(2, "0")}`;
 }
 
-type Busy = null | "generation" | "upload" | "render" | "publish" | "cover";
+type Busy =
+  | null
+  | "generation"
+  | "upload"
+  | "render"
+  | "publish"
+  | "cover"
+  | "metadata-gen"
+  | "metadata-save";
+
+// Brouillon éditable des métadonnées : tout en chaînes, les hashtags saisis
+// séparés par des virgules (découpés à l'enregistrement).
+type MetaDraft = {
+  youtube_title: string;
+  youtube_description: string;
+  youtube_tags: string;
+  soundcloud_description: string;
+  soundcloud_tags: string;
+};
+
+function draftFrom(meta: PublicationMetadata): MetaDraft {
+  return {
+    youtube_title: meta.youtube_title ?? "",
+    youtube_description: meta.youtube_description ?? "",
+    youtube_tags: meta.youtube_tags.join(", "),
+    soundcloud_description: meta.soundcloud_description ?? "",
+    soundcloud_tags: meta.soundcloud_tags.join(", "),
+  };
+}
+
+function splitTags(value: string): string[] {
+  return value
+    .split(",")
+    .map((tag) => tag.trim())
+    .filter(Boolean);
+}
 
 // Quel format de pochette alimente quelle vidéo — pour verrouiller la
 // suppression d'une pochette déjà utilisée au rendu.
@@ -86,6 +124,13 @@ export function CoverStep({ publicationId }: { publicationId: string }) {
   const [renderDone, setRenderDone] = useState(0);
   const [renderTotal, setRenderTotal] = useState(2);
   const [elapsed, setElapsed] = useState(0);
+  // Brouillon éditable des textes de publication (JALON 3). Réensemencé depuis
+  // le serveur à chaque changement de la publication (régénération, sauvegarde),
+  // pas pendant la frappe — la publication n'est rechargée que sur action.
+  const [meta, setMeta] = useState<MetaDraft | null>(null);
+  // Référence des métadonnées à partir desquelles le brouillon a été ensemencé,
+  // pour ne réensemencer que lorsqu'elles changent réellement (cf. plus bas).
+  const [metaSource, setMetaSource] = useState<PublicationMetadata | null>(null);
 
   // Échap ferme l'aperçu agrandi — au clavier comme au clic sur le fond.
   useEffect(() => {
@@ -144,6 +189,15 @@ export function CoverStep({ publicationId }: { publicationId: string }) {
       clearInterval(poll);
     };
   }, [status, publicationId]);
+
+  // Réensemence le brouillon des textes quand les métadonnées changent (motif
+  // React d'ajustement d'état pendant le rendu, sans effet). La comparaison de
+  // référence suffit : le serveur renvoie un nouvel objet à chaque action, et la
+  // frappe ne touche pas `publication` — les éditions ne sont donc pas écrasées.
+  if (publication && publication.metadata !== metaSource) {
+    setMetaSource(publication.metadata);
+    setMeta(draftFrom(publication.metadata));
+  }
 
   async function run(kind: Busy, action: () => Promise<Publication>) {
     setBusy(kind);
@@ -567,6 +621,130 @@ export function CoverStep({ publicationId }: { publicationId: string }) {
               </a>
             </div>
           ))}
+
+          {meta && (
+            <section className="mt-2 flex flex-col gap-3 border-t border-current/10 pt-4">
+              <div className="flex items-center justify-between gap-3">
+                <h3 className="text-sm font-medium">Textes de publication</h3>
+                <button
+                  type="button"
+                  onClick={() =>
+                    run("metadata-gen", () =>
+                      generateMetadata(publication.id),
+                    )
+                  }
+                  disabled={busy !== null}
+                  className="shrink-0 text-xs font-medium underline underline-offset-2 disabled:opacity-40"
+                >
+                  {busy === "metadata-gen"
+                    ? "Rédaction…"
+                    : publication.metadata.youtube_title
+                      ? "Régénérer avec l’IA"
+                      : "Rédiger avec l’IA"}
+                </button>
+              </div>
+
+              <label className="flex flex-col gap-1 text-sm">
+                <span className="font-medium">Titre YouTube</span>
+                <input
+                  value={meta.youtube_title}
+                  onChange={(event) =>
+                    setMeta({ ...meta, youtube_title: event.target.value })
+                  }
+                  disabled={busy !== null}
+                  maxLength={200}
+                  className="rounded-lg border border-current/20 bg-transparent px-3 py-2 disabled:opacity-40"
+                />
+              </label>
+
+              <label className="flex flex-col gap-1 text-sm">
+                <span className="font-medium">Description YouTube</span>
+                <textarea
+                  value={meta.youtube_description}
+                  onChange={(event) =>
+                    setMeta({
+                      ...meta,
+                      youtube_description: event.target.value,
+                    })
+                  }
+                  disabled={busy !== null}
+                  rows={5}
+                  maxLength={5000}
+                  className="rounded-lg border border-current/20 bg-transparent px-3 py-2 disabled:opacity-40"
+                />
+              </label>
+
+              <label className="flex flex-col gap-1 text-sm">
+                <span className="font-medium">Hashtags YouTube</span>
+                <input
+                  value={meta.youtube_tags}
+                  onChange={(event) =>
+                    setMeta({ ...meta, youtube_tags: event.target.value })
+                  }
+                  disabled={busy !== null}
+                  placeholder="drill, rap français, freestyle"
+                  className="rounded-lg border border-current/20 bg-transparent px-3 py-2 disabled:opacity-40"
+                />
+                <span className="text-xs opacity-60">
+                  Séparés par des virgules, sans le caractère #.
+                </span>
+              </label>
+
+              <label className="flex flex-col gap-1 text-sm">
+                <span className="font-medium">Description SoundCloud</span>
+                <textarea
+                  value={meta.soundcloud_description}
+                  onChange={(event) =>
+                    setMeta({
+                      ...meta,
+                      soundcloud_description: event.target.value,
+                    })
+                  }
+                  disabled={busy !== null}
+                  rows={3}
+                  maxLength={5000}
+                  className="rounded-lg border border-current/20 bg-transparent px-3 py-2 disabled:opacity-40"
+                />
+              </label>
+
+              <label className="flex flex-col gap-1 text-sm">
+                <span className="font-medium">Hashtags SoundCloud</span>
+                <input
+                  value={meta.soundcloud_tags}
+                  onChange={(event) =>
+                    setMeta({ ...meta, soundcloud_tags: event.target.value })
+                  }
+                  disabled={busy !== null}
+                  placeholder="drill, rap"
+                  className="rounded-lg border border-current/20 bg-transparent px-3 py-2 disabled:opacity-40"
+                />
+              </label>
+
+              <button
+                type="button"
+                onClick={() =>
+                  run("metadata-save", () =>
+                    updateMetadata(publication.id, {
+                      youtube_title: meta.youtube_title,
+                      youtube_description: meta.youtube_description,
+                      youtube_tags: splitTags(meta.youtube_tags),
+                      soundcloud_description: meta.soundcloud_description,
+                      soundcloud_tags: splitTags(meta.soundcloud_tags),
+                    }),
+                  )
+                }
+                disabled={busy !== null}
+                className={ACTION}
+              >
+                {busy === "metadata-save"
+                  ? "Enregistrement…"
+                  : "Enregistrer les textes"}
+              </button>
+              <p className="text-xs opacity-60">
+                Le titre et la description YouTube servent à la publication.
+              </p>
+            </section>
+          )}
 
           <div className="mt-2 flex flex-col gap-3 border-t border-current/10 pt-4">
             <h3 className="text-sm font-medium">Publier sur YouTube</h3>
