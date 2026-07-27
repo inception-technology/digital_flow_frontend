@@ -94,7 +94,14 @@ export function CoverStep({ publicationId }: { publicationId: string }) {
   useEffect(() => {
     if (status !== "rendering") return;
     const timer = setInterval(() => {
-      fetchPublication(publicationId).then(setPublication).catch(() => {});
+      fetchPublication(publicationId)
+        .then((fresh) => {
+          // On ne remplace l'état qu'une fois le rendu terminé. Sinon chaque
+          // poll rapporterait de nouvelles URLs signées, ce qui rechargerait
+          // pochettes et vidéo (la lecture repartirait) toutes les 4 s.
+          if (fresh.status !== "rendering") setPublication(fresh);
+        })
+        .catch(() => {});
     }, 4000);
     return () => clearInterval(timer);
   }, [status, publicationId]);
@@ -326,7 +333,7 @@ export function CoverStep({ publicationId }: { publicationId: string }) {
         </p>
       )}
 
-      {!hasVideos && publication.render_error && (
+      {!isRendering && publication.render_error && (
         <p
           role="alert"
           className="mb-4 text-sm font-medium text-red-700 dark:text-red-400"
@@ -335,7 +342,7 @@ export function CoverStep({ publicationId }: { publicationId: string }) {
         </p>
       )}
 
-      {hasVideos ? (
+      {hasVideos && !isRendering ? (
         <section className="flex flex-col gap-4">
           <div>
             <h2 className="text-lg font-semibold">Vos vidéos sont prêtes</h2>
