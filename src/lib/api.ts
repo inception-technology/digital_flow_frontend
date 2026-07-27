@@ -185,6 +185,17 @@ export function publishYoutube(
   });
 }
 
+/**
+ * Supprime une pochette d'un format donné (« 16:9 », « 9:16 », « 1:1 »).
+ * Refusé si elle a servi au rendu d'une vidéo.
+ */
+export function deleteCover(id: string, ratio: string): Promise<Publication> {
+  return request(
+    `/api/publications/${id}/cover?ratio=${encodeURIComponent(ratio)}`,
+    { method: "DELETE" },
+  );
+}
+
 /** Supprime la publication et ses médias. Irréversible. Refusé si publié. */
 export async function deletePublication(id: string): Promise<void> {
   const response = await fetch(`${API_URL}/api/publications/${id}`, {

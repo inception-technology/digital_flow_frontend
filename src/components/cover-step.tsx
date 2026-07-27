@@ -6,6 +6,7 @@ import { useEffect, useState } from "react";
 import {
   ApiError,
   archivePublication,
+  deleteCover,
   deletePublication,
   fetchPublication,
   fetchRenderStatus,
@@ -44,7 +45,14 @@ function formatElapsed(seconds: number): string {
   return `${minutes}:${String(seconds % 60).padStart(2, "0")}`;
 }
 
-type Busy = null | "generation" | "upload" | "render" | "publish";
+type Busy = null | "generation" | "upload" | "render" | "publish" | "cover";
+
+// Quel format de pochette alimente quelle vidéo — pour verrouiller la
+// suppression d'une pochette déjà utilisée au rendu.
+const RATIO_VIDEO: Record<string, string> = {
+  "16:9": "landscape",
+  "9:16": "vertical",
+};
 
 const PRIVACY_LABELS: Record<Privacy, string> = {
   public: "Publique",
@@ -196,6 +204,10 @@ export function CoverStep({ publicationId }: { publicationId: string }) {
       VIDEO_ORDER.indexOf(b.output_format),
   );
   const hasVideos = videos.length > 0;
+  const renderedFormats = new Set(videos.map((video) => video.output_format));
+  // Une pochette est verrouillée si elle a servi au rendu d'une vidéo.
+  const isCoverLocked = (ratio: string) =>
+    ratio in RATIO_VIDEO && renderedFormats.has(RATIO_VIDEO[ratio]);
   const isRendering = publication.status === "rendering";
   // Un projet publié s'archive ; les autres se suppriment.
   const isPublished = publication.status === "published";
@@ -358,14 +370,46 @@ export function CoverStep({ publicationId }: { publicationId: string }) {
                   className="max-h-80 w-auto rounded"
                 />
               </button>
-              <div>
-                <p className="text-sm font-medium">
-                  {RATIO_LABELS[cover.ratio] ?? cover.ratio}
-                </p>
-                <p className="text-xs tabular-nums opacity-60">
-                  {cover.ratio} · {cover.width}×{cover.height} · appuyez pour
-                  agrandir
-                </p>
+              <div className="flex items-end justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="text-sm font-medium">
+                    {RATIO_LABELS[cover.ratio] ?? cover.ratio}
+                  </p>
+                  <p className="text-xs tabular-nums opacity-60">
+                    {cover.ratio} · {cover.width}×{cover.height} · appuyez pour
+                    agrandir
+                  </p>
+                </div>
+                <div className="flex shrink-0 items-center gap-3 text-xs">
+                  <a
+                    href={cover.url}
+                    download
+                    className="font-medium underline underline-offset-2"
+                  >
+                    Télécharger
+                  </a>
+                  {isCoverLocked(cover.ratio) ? (
+                    <span
+                      className="opacity-50"
+                      title="Cette pochette a servi au rendu de la vidéo"
+                    >
+                      Utilisée
+                    </span>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() =>
+                        run("cover", () =>
+                          deleteCover(publication.id, cover.ratio),
+                        )
+                      }
+                      disabled={busy !== null}
+                      className="font-medium text-red-700 disabled:opacity-40 dark:text-red-400"
+                    >
+                      Supprimer
+                    </button>
+                  )}
+                </div>
               </div>
             </li>
           ))}
