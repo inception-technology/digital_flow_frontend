@@ -1,9 +1,11 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
 import {
   ApiError,
+  deletePublication,
   fetchPublication,
   generateCover,
   startRender,
@@ -35,10 +37,14 @@ const ACTION =
 type Busy = null | "generation" | "upload" | "render";
 
 export function CoverStep({ publicationId }: { publicationId: string }) {
+  const router = useRouter();
   const [publication, setPublication] = useState<Publication | null>(null);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState<Busy>(null);
   const [error, setError] = useState<string | null>(null);
+  // Suppression : géré à part du reste (`busy`), avec sa propre confirmation.
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const [prompt, setPrompt] = useState("");
   const [useTitle, setUseTitle] = useState(true);
   const [useStyle, setUseStyle] = useState(true);
@@ -93,6 +99,26 @@ export function CoverStep({ publicationId }: { publicationId: string }) {
     } finally {
       setBusy(null);
     }
+  }
+
+  async function handleDelete() {
+    setDeleting(true);
+    setError(null);
+    try {
+      await deletePublication(publicationId);
+      // Retour à l'accueil : la publication n'existe plus, rester ici afficherait
+      // une erreur au prochain rafraîchissement.
+      router.replace("/");
+    } catch (caught) {
+      setError(
+        caught instanceof ApiError
+          ? caught.message
+          : "La suppression a échoué — réessayez.",
+      );
+      setDeleting(false);
+      setConfirmingDelete(false);
+    }
+    // Pas de `finally` : en cas de succès la navigation est en cours.
   }
 
   if (loading) {
@@ -381,6 +407,56 @@ export function CoverStep({ publicationId }: { publicationId: string }) {
                 : "J’accepte ces visuels — lancer les vidéos →"}
             </button>
           )}
+        </div>
+      )}
+
+      <footer className="mt-12 border-t border-current/10 pt-4">
+        <button
+          type="button"
+          onClick={() => setConfirmingDelete(true)}
+          disabled={busy !== null || deleting}
+          className="text-sm font-medium text-red-700 disabled:opacity-40 dark:text-red-400"
+        >
+          Supprimer ce projet
+        </button>
+      </footer>
+
+      {confirmingDelete && (
+        // Toast de confirmation : une suppression est irréversible, on ne
+        // l'exécute qu'après un second geste explicite.
+        <div
+          role="alertdialog"
+          aria-modal="true"
+          aria-label="Confirmer la suppression"
+          className="fixed inset-x-0 bottom-0 z-50 flex justify-center p-4"
+        >
+          <div className="flex w-full max-w-md flex-col gap-3 rounded-xl border border-current/15 bg-background p-4 shadow-lg">
+            <div>
+              <p className="text-sm font-medium">Supprimer ce projet ?</p>
+              <p className="mt-1 text-xs opacity-60">
+                « {publication.title} » et ses visuels et vidéos seront
+                définitivement supprimés. Cette action est irréversible.
+              </p>
+            </div>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => setConfirmingDelete(false)}
+                disabled={deleting}
+                className="flex-1 rounded-lg border border-current/20 px-4 py-2.5 text-sm font-medium disabled:opacity-40"
+              >
+                Annuler
+              </button>
+              <button
+                type="button"
+                onClick={handleDelete}
+                disabled={deleting}
+                className="flex-1 rounded-lg bg-red-600 px-4 py-2.5 text-sm font-medium text-white disabled:opacity-60"
+              >
+                {deleting ? "Suppression…" : "Supprimer"}
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </main>

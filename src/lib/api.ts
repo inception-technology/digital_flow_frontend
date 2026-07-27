@@ -147,6 +147,16 @@ export function startRender(id: string): Promise<Publication> {
   return request(`/api/publications/${id}/video`, { method: "POST" });
 }
 
+/** Supprime la publication et ses médias. Irréversible. */
+export async function deletePublication(id: string): Promise<void> {
+  const response = await fetch(`${API_URL}/api/publications/${id}`, {
+    method: "DELETE",
+    credentials: "include",
+  });
+
+  if (!response.ok) throw new ApiError(await readDetail(response));
+}
+
 export async function uploadCover(id: string, file: File): Promise<Publication> {
   const body = new FormData();
   body.append("file", file);
