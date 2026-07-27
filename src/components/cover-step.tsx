@@ -6,7 +6,10 @@ import { useEffect, useState } from "react";
 import {
   ApiError,
   archivePublication,
+  coverSetDownloadUrl,
+  coversDownloadUrl,
   deleteCover,
+  deleteCoverSet,
   deletePublication,
   fetchPublication,
   fetchRenderStatus,
@@ -414,6 +417,84 @@ export function CoverStep({ publicationId }: { publicationId: string }) {
             </li>
           ))}
         </ul>
+      )}
+
+      {hasCovers && (
+        <a
+          href={coversDownloadUrl(publication.id)}
+          className={`${ACTION} mb-6 block text-center`}
+        >
+          Télécharger les 3 pochettes (zip)
+        </a>
+      )}
+
+      {publication.cover_history.length > 0 && (
+        <section className="mb-6">
+          <h2 className="mb-2 text-sm font-medium opacity-70">
+            Générations précédentes
+          </h2>
+          <ul className="flex flex-col gap-3">
+            {publication.cover_history.map((set) => (
+              <li
+                key={set.id}
+                className="flex items-center gap-3 rounded-lg border border-current/15 p-3"
+              >
+                <div className="flex gap-1">
+                  {[...set.covers]
+                    .sort(
+                      (a, b) =>
+                        RATIO_ORDER.indexOf(a.ratio) -
+                        RATIO_ORDER.indexOf(b.ratio),
+                    )
+                    .map((cover) => (
+                      <button
+                        key={cover.ratio}
+                        type="button"
+                        onClick={() => setEnlarged(cover)}
+                        aria-label={`Agrandir ${RATIO_LABELS[cover.ratio] ?? cover.ratio}`}
+                        className="shrink-0"
+                      >
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img
+                          src={cover.url}
+                          alt={RATIO_LABELS[cover.ratio] ?? cover.ratio}
+                          className="h-12 w-12 rounded object-cover"
+                        />
+                      </button>
+                    ))}
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="text-xs opacity-60">
+                    {new Date(set.created_at).toLocaleString("fr-FR", {
+                      dateStyle: "short",
+                      timeStyle: "short",
+                    })}
+                  </p>
+                  <div className="mt-1 flex gap-3 text-xs">
+                    <a
+                      href={coverSetDownloadUrl(publication.id, set.id)}
+                      className="font-medium underline underline-offset-2"
+                    >
+                      Télécharger les 3
+                    </a>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        run("cover", () =>
+                          deleteCoverSet(publication.id, set.id),
+                        )
+                      }
+                      disabled={busy !== null}
+                      className="font-medium text-red-700 disabled:opacity-40 dark:text-red-400"
+                    >
+                      Supprimer
+                    </button>
+                  </div>
+                </div>
+              </li>
+            ))}
+          </ul>
+        </section>
       )}
 
       {enlarged && (

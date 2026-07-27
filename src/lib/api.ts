@@ -40,6 +40,13 @@ export type VideoFormat = {
   url: string;
 };
 
+/** Un jeu de pochettes d'une génération précédente (historique). */
+export type CoverSet = {
+  id: string;
+  created_at: string;
+  covers: CoverFormat[];
+};
+
 export type Publication = {
   id: string;
   title: string;
@@ -50,6 +57,7 @@ export type Publication = {
   image_generations: number;
   remaining_generations: number;
   covers: CoverFormat[];
+  cover_history: CoverSet[];
   videos: VideoFormat[];
   render_error: string | null;
   archived: boolean;
@@ -194,6 +202,23 @@ export function deleteCover(id: string, ratio: string): Promise<Publication> {
     `/api/publications/${id}/cover?ratio=${encodeURIComponent(ratio)}`,
     { method: "DELETE" },
   );
+}
+
+/** Lien de téléchargement zip des 3 pochettes actuelles (le backend force le zip). */
+export function coversDownloadUrl(id: string): string {
+  return `${API_URL}/api/publications/${id}/covers/download`;
+}
+
+/** Lien de téléchargement zip d'une génération archivée. */
+export function coverSetDownloadUrl(id: string, setId: string): string {
+  return `${API_URL}/api/publications/${id}/cover-sets/${setId}/download`;
+}
+
+/** Supprime une génération de pochettes archivée et ses images. */
+export function deleteCoverSet(id: string, setId: string): Promise<Publication> {
+  return request(`/api/publications/${id}/cover-sets/${setId}`, {
+    method: "DELETE",
+  });
 }
 
 /** Supprime la publication et ses médias. Irréversible. Refusé si publié. */
