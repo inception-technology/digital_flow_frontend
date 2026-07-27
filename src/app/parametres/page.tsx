@@ -7,9 +7,15 @@ import {
   ApiError,
   fetchProfile,
   logout,
+  soundcloudLoginUrl,
   updateArtistName,
   type Profile,
 } from "@/lib/api";
+
+const SOUNDCLOUD_FEEDBACK: Record<string, string> = {
+  connecte: "SoundCloud est maintenant connecté.",
+  refus: "Connexion SoundCloud annulée.",
+};
 
 export default function SettingsPage() {
   const router = useRouter();
@@ -20,6 +26,21 @@ export default function SettingsPage() {
   const [busy, setBusy] = useState<null | "save" | "logout">(null);
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
+  const [platformNotice, setPlatformNotice] = useState<string | null>(null);
+
+  // Retour du flow OAuth SoundCloud (?soundcloud=connecte|refus). Lu depuis
+  // l'URL sans `useSearchParams` (qui imposerait un Suspense au build), puis
+  // nettoyé pour ne pas rester après un rafraîchissement.
+  useEffect(() => {
+    const outcome = new URLSearchParams(window.location.search).get("soundcloud");
+    if (outcome && outcome in SOUNDCLOUD_FEEDBACK) {
+      // Après montage volontairement : lire l'URL au rendu (initialiseur) ou en
+      // SSR divergerait du HTML serveur (mismatch d'hydratation).
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setPlatformNotice(SOUNDCLOUD_FEEDBACK[outcome]);
+      window.history.replaceState(null, "", "/parametres");
+    }
+  }, []);
 
   useEffect(() => {
     fetchProfile()
@@ -133,6 +154,42 @@ export default function SettingsPage() {
           {busy === "save" ? "Enregistrement…" : "Enregistrer"}
         </button>
       </form>
+
+      <section className="mb-8">
+        <h2 className="mb-2 text-sm font-medium">Plateformes connectées</h2>
+        {platformNotice && (
+          <p role="status" className="mb-2 text-sm font-medium opacity-70">
+            {platformNotice}
+          </p>
+        )}
+        <ul className="flex flex-col gap-2">
+          <li className="flex items-center justify-between rounded-lg border border-current/15 p-3 text-sm">
+            <span>YouTube</span>
+            {profile.connected_platforms.includes("youtube") ? (
+              <span className="font-medium text-green-700 dark:text-green-400">
+                ✓ Connecté
+              </span>
+            ) : (
+              <span className="opacity-60">Non connecté</span>
+            )}
+          </li>
+          <li className="flex items-center justify-between rounded-lg border border-current/15 p-3 text-sm">
+            <span>SoundCloud</span>
+            {profile.connected_platforms.includes("soundcloud") ? (
+              <span className="font-medium text-green-700 dark:text-green-400">
+                ✓ Connecté
+              </span>
+            ) : (
+              <a
+                href={soundcloudLoginUrl}
+                className="font-medium underline underline-offset-2"
+              >
+                Connecter
+              </a>
+            )}
+          </li>
+        </ul>
+      </section>
 
       <button
         type="button"

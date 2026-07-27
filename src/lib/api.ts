@@ -74,10 +74,13 @@ export type Publication = {
   render_error: string | null;
   archived: boolean;
   youtube_url: string | null;
+  soundcloud_url: string | null;
   metadata: PublicationMetadata;
 };
 
 export type Privacy = "private" | "unlisted" | "public";
+/** Visibilité d'un morceau SoundCloud (l'API n'a pas de « non répertorié »). */
+export type Sharing = "private" | "public";
 
 /** Ligne de la liste des publications — sans média, donc sans URL signée. */
 export type PublicationSummary = {
@@ -88,6 +91,8 @@ export type PublicationSummary = {
 };
 
 export const loginUrl = `${API_URL}/api/auth/google/login`;
+/** Lien de liaison du compte SoundCloud (démarre le consentement OAuth). */
+export const soundcloudLoginUrl = `${API_URL}/api/auth/soundcloud/login`;
 
 export class ApiError extends Error {}
 
@@ -229,6 +234,20 @@ export function publishYoutube(
   return request(`/api/publications/${id}/publish/youtube`, {
     method: "POST",
     body: JSON.stringify({ privacy }),
+  });
+}
+
+/**
+ * Publie le morceau (audio d'origine + artwork 1:1) sur le compte SoundCloud du
+ * créateur. `sharing` par défaut « private » côté serveur — on l'explicite ici.
+ */
+export function publishSoundcloud(
+  id: string,
+  sharing: Sharing,
+): Promise<Publication> {
+  return request(`/api/publications/${id}/publish/soundcloud`, {
+    method: "POST",
+    body: JSON.stringify({ sharing }),
   });
 }
 

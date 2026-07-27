@@ -15,6 +15,7 @@ import {
   fetchRenderStatus,
   generateCover,
   generateMetadata,
+  publishSoundcloud,
   publishYoutube,
   startRender,
   updateMetadata,
@@ -23,6 +24,7 @@ import {
   type Privacy,
   type Publication,
   type PublicationMetadata,
+  type Sharing,
 } from "@/lib/api";
 import { checkCoverDimensions, readImageSize } from "@/lib/image";
 
@@ -59,7 +61,8 @@ type Busy =
   | "publish"
   | "cover"
   | "metadata-gen"
-  | "metadata-save";
+  | "metadata-save"
+  | "publish-soundcloud";
 
 // Brouillon éditable des métadonnées : tout en chaînes, les hashtags saisis
 // séparés par des virgules (découpés à l'enregistrement).
@@ -101,6 +104,11 @@ const PRIVACY_LABELS: Record<Privacy, string> = {
   private: "Privée",
 };
 
+const SHARING_LABELS: Record<Sharing, string> = {
+  public: "Public",
+  private: "Privé",
+};
+
 export function CoverStep({ publicationId }: { publicationId: string }) {
   const router = useRouter();
   const [publication, setPublication] = useState<Publication | null>(null);
@@ -118,6 +126,7 @@ export function CoverStep({ publicationId }: { publicationId: string }) {
   const [useTitle, setUseTitle] = useState(true);
   const [useStyle, setUseStyle] = useState(true);
   const [privacy, setPrivacy] = useState<Privacy>("private");
+  const [sharing, setSharing] = useState<Sharing>("private");
   const [enlarged, setEnlarged] = useState<CoverFormat | null>(null);
   // Avancement du rendu : nombre de formats prêts + temps écoulé, pour un
   // indicateur vivant pendant les quelques minutes que dure le rendu.
@@ -795,6 +804,59 @@ export function CoverStep({ publicationId }: { publicationId: string }) {
                 <p className="text-xs opacity-60">
                   La vidéo paysage part sur votre chaîne YouTube, avec la
                   miniature 16:9.
+                </p>
+              </>
+            )}
+          </div>
+
+          <div className="mt-2 flex flex-col gap-3 border-t border-current/10 pt-4">
+            <h3 className="text-sm font-medium">Publier sur SoundCloud</h3>
+            {publication.soundcloud_url ? (
+              <a
+                href={publication.soundcloud_url}
+                target="_blank"
+                rel="noreferrer"
+                className="flex items-center gap-2 text-sm font-medium text-green-700 underline underline-offset-2 dark:text-green-400"
+              >
+                <span aria-hidden>✓</span> Publié — écouter sur SoundCloud
+              </a>
+            ) : (
+              <>
+                <label className="flex items-center justify-between gap-3 text-sm">
+                  <span>Visibilité</span>
+                  <select
+                    value={sharing}
+                    onChange={(event) =>
+                      setSharing(event.target.value as Sharing)
+                    }
+                    disabled={busy !== null}
+                    className="rounded-lg border border-current/20 bg-transparent px-3 py-2 text-sm"
+                  >
+                    {(["private", "public"] as Sharing[]).map((value) => (
+                      <option key={value} value={value}>
+                        {SHARING_LABELS[value]}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <button
+                  type="button"
+                  onClick={() =>
+                    run("publish-soundcloud", () =>
+                      publishSoundcloud(publication.id, sharing),
+                    )
+                  }
+                  disabled={busy !== null}
+                  className="rounded-lg bg-foreground px-4 py-3 font-medium text-background disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  {busy === "publish-soundcloud"
+                    ? "Publication en cours…"
+                    : "Publier sur SoundCloud →"}
+                </button>
+                <p className="text-xs opacity-60">
+                  Le morceau audio part sur votre compte SoundCloud, avec
+                  l’artwork carré et les tags. Reliez d’abord SoundCloud dans les
+                  paramètres.
                 </p>
               </>
             )}
