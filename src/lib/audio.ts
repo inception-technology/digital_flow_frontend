@@ -72,15 +72,3 @@ export function checkDuration(seconds: number): AudioCheck {
 
   return { ok: true };
 }
-
-/** Lit la durée via un élément `<audio>`, sans décoder tout le fichier. */
-export function readDuration(objectUrl: string): Promise<number> {
-  return new Promise((resolve, reject) => {
-    const probe = new Audio();
-    probe.preload = "metadata";
-    probe.onloadedmetadata = () => resolve(probe.duration);
-    probe.onerror = () =>
-      reject(new Error("Fichier audio illisible ou corrompu."));
-    probe.src = objectUrl;
-  });
-}

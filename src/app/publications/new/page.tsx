@@ -15,14 +15,14 @@ import {
   checkFile,
   formatBytes,
   formatDuration,
-  readDuration,
 } from "@/lib/audio";
 import { ACCEPT_ATTRIBUTE, MUSIC_STYLES, type MusicStyle } from "@/lib/constants";
 
 type Selection = {
   file: File;
   objectUrl: string;
-  durationSeconds: number;
+  // `null` tant que le lecteur n'a pas lu les métadonnées.
+  durationSeconds: number | null;
 };
 
 const FIELD =
@@ -86,7 +86,7 @@ export default function NewPublicationPage() {
     [replaceSelection],
   );
 
-  async function handleFile(file: File | undefined) {
+  function handleFile(file: File | undefined) {
     setUploadError(null);
 
     if (!file) {
@@ -101,24 +101,32 @@ export default function NewPublicationPage() {
       return;
     }
 
-    const objectUrl = URL.createObjectURL(file);
+    // La durée est lue par le lecteur `<audio>` affiché ci-dessous, via son
+    // événement `loadedmetadata` — pas par une sonde séparée. Une sonde
+    // chargerait le même blob une seconde fois pour rien.
+    setFileError(null);
+    replaceSelection({
+      file,
+      objectUrl: URL.createObjectURL(file),
+      durationSeconds: null,
+    });
+  }
 
-    let durationSeconds: number;
-    try {
-      durationSeconds = await readDuration(objectUrl);
-    } catch {
-      rejectFile("Fichier audio illisible ou corrompu.", objectUrl);
-      return;
-    }
-
+  // Appelé quand le lecteur a lu les métadonnées : on valide la durée ici,
+  // maintenant qu'on la connaît sans avoir chargé le fichier deux fois. Le
+  // fichier a pu être remplacé entre-temps (événement tardif) — on ignore alors.
+  function acceptDuration(objectUrl: string, durationSeconds: number) {
+    if (currentObjectUrl.current !== objectUrl) return;
     const durationCheck = checkDuration(durationSeconds);
     if (!durationCheck.ok) {
-      rejectFile(durationCheck.message, objectUrl);
+      rejectFile(durationCheck.message);
       return;
     }
-
-    setFileError(null);
-    replaceSelection({ file, objectUrl, durationSeconds });
+    setSelection((current) =>
+      current && current.objectUrl === objectUrl
+        ? { ...current, durationSeconds }
+        : current,
+    );
   }
 
   async function handleSubmit(event: React.FormEvent) {
@@ -153,8 +161,12 @@ export default function NewPublicationPage() {
     // le formulaire ferait clignoter le bouton avant que la page ne change.
   }
 
+  // On attend la durée (donc la validation des 10 min) avant d'autoriser l'envoi.
   const canContinue =
-    selection !== null && title.trim().length > 0 && !uploading;
+    selection !== null &&
+    selection.durationSeconds !== null &&
+    title.trim().length > 0 &&
+    !uploading;
 
   if (loadingProfile || !profile) {
     return (
@@ -207,11 +219,33 @@ export default function NewPublicationPage() {
                   {selection.file.name}
                 </span>
                 <span className="shrink-0 text-xs tabular-nums opacity-60">
-                  {formatDuration(selection.durationSeconds)} ·{" "}
-                  {formatBytes(selection.file.size)}
+                  {selection.durationSeconds !== null
+                    ? formatDuration(selection.durationSeconds)
+                    : "…"}{" "}
+                  · {formatBytes(selection.file.size)}
                 </span>
               </div>
-              <audio controls src={selection.objectUrl} className="w-full" />
+              <audio
+                controls
+                // `metadata` : on ne veut que la durée, pas décoder tout le
+                // fichier — et ce lecteur est la seule source de la durée.
+                preload="metadata"
+                src={selection.objectUrl}
+                onLoadedMetadata={(event) =>
+                  acceptDuration(
+                    selection.objectUrl,
+                    event.currentTarget.duration,
+                  )
+                }
+                onError={() => {
+                  // Ignorer une erreur tardive : elle peut venir de la
+                  // révocation de l'objectUrl d'un fichier déjà remplacé.
+                  if (currentObjectUrl.current === selection.objectUrl) {
+                    rejectFile("Fichier audio illisible ou corrompu.");
+                  }
+                }}
+                className="w-full"
+              />
             </div>
           )}
         </fieldset>
