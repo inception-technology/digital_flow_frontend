@@ -9,9 +9,11 @@ import {
   deletePublication,
   fetchPublication,
   generateCover,
+  publishYoutube,
   startRender,
   uploadCover,
   type CoverFormat,
+  type Privacy,
   type Publication,
 } from "@/lib/api";
 
@@ -35,7 +37,13 @@ const VIDEO_ORDER = ["landscape", "vertical"];
 const ACTION =
   "rounded-lg border border-current/20 px-4 py-3 text-sm font-medium disabled:cursor-not-allowed disabled:opacity-40";
 
-type Busy = null | "generation" | "upload" | "render";
+type Busy = null | "generation" | "upload" | "render" | "publish";
+
+const PRIVACY_LABELS: Record<Privacy, string> = {
+  public: "Publique",
+  unlisted: "Non répertoriée",
+  private: "Privée",
+};
 
 export function CoverStep({ publicationId }: { publicationId: string }) {
   const router = useRouter();
@@ -53,6 +61,7 @@ export function CoverStep({ publicationId }: { publicationId: string }) {
   const [prompt, setPrompt] = useState("");
   const [useTitle, setUseTitle] = useState(true);
   const [useStyle, setUseStyle] = useState(true);
+  const [privacy, setPrivacy] = useState<Privacy>("private");
   const [enlarged, setEnlarged] = useState<CoverFormat | null>(null);
 
   // Échap ferme l'aperçu agrandi — au clavier comme au clic sur le fond.
@@ -354,6 +363,60 @@ export function CoverStep({ publicationId }: { publicationId: string }) {
               </a>
             </div>
           ))}
+
+          <div className="mt-2 flex flex-col gap-3 border-t border-current/10 pt-4">
+            <h3 className="text-sm font-medium">Publier sur YouTube</h3>
+            {publication.youtube_url ? (
+              <a
+                href={publication.youtube_url}
+                target="_blank"
+                rel="noreferrer"
+                className="flex items-center gap-2 text-sm font-medium text-green-700 underline underline-offset-2 dark:text-green-400"
+              >
+                <span aria-hidden>✓</span> Publié — voir sur YouTube
+              </a>
+            ) : (
+              <>
+                <label className="flex items-center justify-between gap-3 text-sm">
+                  <span>Visibilité</span>
+                  <select
+                    value={privacy}
+                    onChange={(event) =>
+                      setPrivacy(event.target.value as Privacy)
+                    }
+                    disabled={busy !== null}
+                    className="rounded-lg border border-current/20 bg-transparent px-3 py-2 text-sm"
+                  >
+                    {(["private", "unlisted", "public"] as Privacy[]).map(
+                      (value) => (
+                        <option key={value} value={value}>
+                          {PRIVACY_LABELS[value]}
+                        </option>
+                      ),
+                    )}
+                  </select>
+                </label>
+                <button
+                  type="button"
+                  onClick={() =>
+                    run("publish", () =>
+                      publishYoutube(publication.id, privacy),
+                    )
+                  }
+                  disabled={busy !== null}
+                  className="rounded-lg bg-foreground px-4 py-3 font-medium text-background disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  {busy === "publish"
+                    ? "Publication en cours…"
+                    : "Publier sur YouTube →"}
+                </button>
+                <p className="text-xs opacity-60">
+                  La vidéo paysage part sur votre chaîne YouTube, avec la
+                  miniature 16:9.
+                </p>
+              </>
+            )}
+          </div>
         </section>
       ) : (
         <div className="flex flex-col gap-3">

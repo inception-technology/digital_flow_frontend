@@ -53,7 +53,10 @@ export type Publication = {
   videos: VideoFormat[];
   render_error: string | null;
   archived: boolean;
+  youtube_url: string | null;
 };
+
+export type Privacy = "private" | "unlisted" | "public";
 
 /** Ligne de la liste des publications — sans média, donc sans URL signée. */
 export type PublicationSummary = {
@@ -151,6 +154,20 @@ export function generateCover(
  */
 export function startRender(id: string): Promise<Publication> {
   return request(`/api/publications/${id}/video`, { method: "POST" });
+}
+
+/**
+ * Publie la vidéo paysage sur la chaîne YouTube du créateur. `privacy` par
+ * défaut « private » côté serveur — on l'explicite ici.
+ */
+export function publishYoutube(
+  id: string,
+  privacy: Privacy,
+): Promise<Publication> {
+  return request(`/api/publications/${id}/publish/youtube`, {
+    method: "POST",
+    body: JSON.stringify({ privacy }),
+  });
 }
 
 /** Supprime la publication et ses médias. Irréversible. Refusé si publié. */
