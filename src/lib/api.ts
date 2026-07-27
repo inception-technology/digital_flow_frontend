@@ -111,9 +111,14 @@ export function fetchPublication(id: string): Promise<Publication> {
   return request(`/api/publications/${id}`);
 }
 
-/** Publications du créateur, la plus récente d'abord. */
-export function fetchPublications(): Promise<PublicationSummary[]> {
-  return request("/api/publications");
+/**
+ * Publications du créateur, la plus récente d'abord. Par défaut la liste
+ * active ; `archived: true` renvoie les projets archivés.
+ */
+export function fetchPublications(
+  archived = false,
+): Promise<PublicationSummary[]> {
+  return request(`/api/publications${archived ? "?archived=true" : ""}`);
 }
 
 /**

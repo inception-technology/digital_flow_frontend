@@ -50,20 +50,53 @@ function formatDateTime(iso: string): string {
   });
 }
 
+/** Une ligne cliquable : pastille d'état, titre, date. Utilisée par les deux
+ * listes (active et archivés). */
+function PublicationRow({ publication }: { publication: PublicationSummary }) {
+  const badge = STATUS[publication.status] ?? {
+    color: "bg-current/30",
+    label: publication.status,
+  };
+  return (
+    <li className="flex items-center gap-3 border-b border-current/10 py-3">
+      <span
+        aria-hidden
+        className={`h-2.5 w-2.5 shrink-0 rounded-full ${badge.color}`}
+      />
+      <div className="min-w-0 flex-1">
+        <Link
+          href={`/publications/${publication.id}`}
+          className="block cursor-pointer truncate font-medium underline-offset-2 hover:underline"
+        >
+          {publication.title}
+        </Link>
+        <p className="text-xs tabular-nums opacity-60">
+          {formatDateTime(publication.created_at)} · {badge.label}
+        </p>
+      </div>
+    </li>
+  );
+}
+
 export default function HomePage() {
   const [profile, setProfile] = useState<Profile | null>(null);
   const [publications, setPublications] = useState<PublicationSummary[]>([]);
+  const [archived, setArchived] = useState<PublicationSummary[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     fetchProfile()
       .then((loaded) => {
         setProfile(loaded);
-        // La liste n'a de sens qu'une fois connecté — et l'appel échouerait.
+        // Les listes n'ont de sens qu'une fois connecté — et l'appel échouerait.
         if (loaded) {
-          return fetchPublications()
-            .then(setPublications)
-            .catch(() => setPublications([]));
+          return Promise.all([
+            fetchPublications().then(setPublications),
+            fetchPublications(true).then(setArchived),
+          ]).catch(() => {
+            setPublications([]);
+            setArchived([]);
+          });
         }
       })
       .catch(() => setProfile(null))
@@ -163,37 +196,23 @@ export default function HomePage() {
           <p className="text-sm opacity-60">Aucune publication pour l’instant.</p>
         ) : (
           <ul className="flex flex-col">
-            {publications.map((publication) => {
-              const badge = STATUS[publication.status] ?? {
-                color: "bg-current/30",
-                label: publication.status,
-              };
-              return (
-                <li
-                  key={publication.id}
-                  className="flex items-center gap-3 border-b border-current/10 py-3"
-                >
-                  <span
-                    aria-hidden
-                    className={`h-2.5 w-2.5 shrink-0 rounded-full ${badge.color}`}
-                  />
-                  <div className="min-w-0 flex-1">
-                    <Link
-                      href={`/publications/${publication.id}`}
-                      className="block cursor-pointer truncate font-medium underline-offset-2 hover:underline"
-                    >
-                      {publication.title}
-                    </Link>
-                    <p className="text-xs tabular-nums opacity-60">
-                      {formatDateTime(publication.created_at)} · {badge.label}
-                    </p>
-                  </div>
-                </li>
-              );
-            })}
+            {publications.map((publication) => (
+              <PublicationRow key={publication.id} publication={publication} />
+            ))}
           </ul>
         )}
       </section>
+
+      {archived.length > 0 && (
+        <section className="mt-8">
+          <h2 className="mb-2 text-sm font-medium opacity-70">Archivés</h2>
+          <ul className="flex flex-col opacity-70">
+            {archived.map((publication) => (
+              <PublicationRow key={publication.id} publication={publication} />
+            ))}
+          </ul>
+        </section>
+      )}
     </main>
   );
 }
