@@ -114,6 +114,21 @@ export function fetchPublication(id: string): Promise<Publication> {
   return request(`/api/publications/${id}`);
 }
 
+export type RenderStatus = {
+  status: string;
+  videos_done: number;
+  videos_total: number;
+  render_error: string | null;
+};
+
+/**
+ * Avancement du rendu — léger (sans URL signée), pour être interrogé en boucle
+ * sans faire clignoter les pochettes déjà affichées.
+ */
+export function fetchRenderStatus(id: string): Promise<RenderStatus> {
+  return request(`/api/publications/${id}/render-status`);
+}
+
 /**
  * Publications du créateur, la plus récente d'abord. Par défaut la liste
  * active ; `archived: true` renvoie les projets archivés.

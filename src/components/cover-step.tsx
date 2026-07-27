@@ -8,6 +8,7 @@ import {
   archivePublication,
   deletePublication,
   fetchPublication,
+  fetchRenderStatus,
   generateCover,
   publishYoutube,
   startRender,
@@ -38,6 +39,11 @@ const VIDEO_ORDER = ["landscape", "vertical"];
 const ACTION =
   "rounded-lg border border-current/20 px-4 py-3 text-sm font-medium disabled:cursor-not-allowed disabled:opacity-40";
 
+function formatElapsed(seconds: number): string {
+  const minutes = Math.floor(seconds / 60);
+  return `${minutes}:${String(seconds % 60).padStart(2, "0")}`;
+}
+
 type Busy = null | "generation" | "upload" | "render" | "publish";
 
 const PRIVACY_LABELS: Record<Privacy, string> = {
@@ -64,6 +70,11 @@ export function CoverStep({ publicationId }: { publicationId: string }) {
   const [useStyle, setUseStyle] = useState(true);
   const [privacy, setPrivacy] = useState<Privacy>("private");
   const [enlarged, setEnlarged] = useState<CoverFormat | null>(null);
+  // Avancement du rendu : nombre de formats prêts + temps écoulé, pour un
+  // indicateur vivant pendant les quelques minutes que dure le rendu.
+  const [renderDone, setRenderDone] = useState(0);
+  const [renderTotal, setRenderTotal] = useState(2);
+  const [elapsed, setElapsed] = useState(0);
 
   // Échap ferme l'aperçu agrandi — au clavier comme au clic sur le fond.
   useEffect(() => {
@@ -94,17 +105,33 @@ export function CoverStep({ publicationId }: { publicationId: string }) {
   const status = publication?.status;
   useEffect(() => {
     if (status !== "rendering") return;
-    const timer = setInterval(() => {
-      fetchPublication(publicationId)
-        .then((fresh) => {
-          // On ne remplace l'état qu'une fois le rendu terminé. Sinon chaque
-          // poll rapporterait de nouvelles URLs signées, ce qui rechargerait
-          // pochettes et vidéo (la lecture repartirait) toutes les 4 s.
-          if (fresh.status !== "rendering") setPublication(fresh);
+
+    const startedAt = Date.now();
+    // Le chrono avance chaque seconde : même à 0/2, l'utilisateur voit que ça
+    // travaille. Il repart de ~0 dès le premier tick (calcul depuis startedAt).
+    const tick = setInterval(
+      () => setElapsed(Math.floor((Date.now() - startedAt) / 1000)),
+      1000,
+    );
+    // On interroge l'endpoint léger (sans URL signée) : il donne l'avancement
+    // par format sans faire clignoter les pochettes. Une fois terminé, on
+    // recharge la publication complète (avec les vidéos et leurs URLs).
+    const poll = setInterval(() => {
+      fetchRenderStatus(publicationId)
+        .then((render) => {
+          setRenderDone(render.videos_done);
+          setRenderTotal(render.videos_total);
+          if (render.status !== "rendering") {
+            fetchPublication(publicationId).then(setPublication).catch(() => {});
+          }
         })
         .catch(() => {});
-    }, 4000);
-    return () => clearInterval(timer);
+    }, 3000);
+
+    return () => {
+      clearInterval(tick);
+      clearInterval(poll);
+    };
   }, [status, publicationId]);
 
   async function run(kind: Busy, action: () => Promise<Publication>) {
@@ -498,11 +525,32 @@ export function CoverStep({ publicationId }: { publicationId: string }) {
           )}
 
           {isRendering ? (
-            <div className="rounded-lg border border-current/15 p-4">
-              <p className="text-sm font-medium">Rendu des vidéos en cours…</p>
-              <p className="mt-1 text-xs opacity-60">
-                Le montage des deux formats prend quelques minutes. Vous pouvez
-                laisser cette page ouverte — elle se met à jour toute seule.
+            <div className="flex flex-col gap-3 rounded-lg border border-current/15 p-4">
+              <div className="flex items-baseline justify-between gap-3">
+                <p className="text-sm font-medium">
+                  Rendu des vidéos… format {Math.min(renderDone + 1, renderTotal)}{" "}
+                  sur {renderTotal}
+                </p>
+                <p className="shrink-0 text-xs tabular-nums opacity-60">
+                  {formatElapsed(elapsed)}
+                </p>
+              </div>
+              <div
+                role="progressbar"
+                aria-valuenow={renderDone}
+                aria-valuemin={0}
+                aria-valuemax={renderTotal}
+                aria-label="Avancement du rendu"
+                className="h-2 overflow-hidden rounded-full bg-current/10"
+              >
+                <div
+                  className="h-full bg-foreground transition-[width] duration-500"
+                  style={{ width: `${(renderDone / renderTotal) * 100}%` }}
+                />
+              </div>
+              <p className="text-xs opacity-60">
+                Chaque format prend une à deux minutes. Vous pouvez laisser cette
+                page ouverte — elle se met à jour toute seule.
               </p>
             </div>
           ) : (
