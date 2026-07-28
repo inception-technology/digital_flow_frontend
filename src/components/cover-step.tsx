@@ -11,6 +11,7 @@ import {
   deleteCover,
   deleteCoverSet,
   deletePublication,
+  fetchProfile,
   fetchPublication,
   fetchRenderStatus,
   generateCover,
@@ -61,8 +62,7 @@ type Busy =
   | "publish"
   | "cover"
   | "metadata-gen"
-  | "metadata-save"
-  | "publish-soundcloud";
+  | "metadata-save";
 
 // Brouillon éditable des métadonnées : tout en chaînes, les hashtags saisis
 // séparés par des virgules (découpés à l'enregistrement).
@@ -127,6 +127,11 @@ export function CoverStep({ publicationId }: { publicationId: string }) {
   const [useStyle, setUseStyle] = useState(true);
   const [privacy, setPrivacy] = useState<Privacy>("private");
   const [sharing, setSharing] = useState<Sharing>("private");
+  // Récap de publication (JALON 3) : plateformes reliées au compte, cibles
+  // cochées, et confirmation avant d'engager la publication.
+  const [connectedPlatforms, setConnectedPlatforms] = useState<string[]>([]);
+  const [targets, setTargets] = useState({ youtube: true, soundcloud: true });
+  const [confirmingPublish, setConfirmingPublish] = useState(false);
   const [enlarged, setEnlarged] = useState<CoverFormat | null>(null);
   // Avancement du rendu : nombre de formats prêts + temps écoulé, pour un
   // indicateur vivant pendant les quelques minutes que dure le rendu.
@@ -163,6 +168,16 @@ export function CoverStep({ publicationId }: { publicationId: string }) {
       )
       .finally(() => setLoading(false));
   }, [publicationId]);
+
+  // Plateformes reliées au compte : sert à activer/désactiver SoundCloud dans le
+  // récap (YouTube vient du login Google, toujours relié).
+  useEffect(() => {
+    fetchProfile()
+      .then((profile) => {
+        if (profile) setConnectedPlatforms(profile.connected_platforms);
+      })
+      .catch(() => {});
+  }, []);
 
   // Le rendu vidéo dure plusieurs minutes côté serveur : tant que la
   // publication est en « rendering », on interroge l'état régulièrement
@@ -277,6 +292,65 @@ export function CoverStep({ publicationId }: { publicationId: string }) {
   const isRendering = publication.status === "rendering";
   // Un projet publié s'archive ; les autres se suppriment.
   const isPublished = publication.status === "published";
+
+  // Récap de publication (JALON 3). Une plateforme déjà publiée s'affiche comme
+  // faite ; SoundCloud n'est sélectionnable que si le compte est relié.
+  const ytPublished = Boolean(publication.youtube_url);
+  const scPublished = Boolean(publication.soundcloud_url);
+  const scConnected = connectedPlatforms.includes("soundcloud");
+  const willPublishYT = targets.youtube && !ytPublished;
+  const willPublishSC = targets.soundcloud && !scPublished && scConnected;
+  const anyTargetSelected = willPublishYT || willPublishSC;
+  const allPublished = ytPublished && scPublished;
+
+  async function handlePublish() {
+    if (!publication) return;
+    setBusy("publish");
+    setError(null);
+    const failures: string[] = [];
+    try {
+      // On enregistre d'abord les textes à l'écran : le backend publie les
+      // textes stockés, pas ceux du brouillon. Un échec ici stoppe tout — on ne
+      // publie pas sur des métadonnées incertaines.
+      if (meta) {
+        setPublication(
+          await updateMetadata(publication.id, {
+            youtube_title: meta.youtube_title,
+            youtube_description: meta.youtube_description,
+            youtube_tags: splitTags(meta.youtube_tags),
+            soundcloud_description: meta.soundcloud_description,
+            soundcloud_tags: splitTags(meta.soundcloud_tags),
+          }),
+        );
+      }
+      // Chaque plateforme est indépendante : un échec sur l'une n'empêche pas
+      // l'autre. La réponse de chaque appel porte l'état à jour cumulé.
+      if (willPublishYT) {
+        try {
+          setPublication(await publishYoutube(publication.id, privacy));
+        } catch (caught) {
+          failures.push(`YouTube : ${caught instanceof ApiError ? caught.message : "échec"}`);
+        }
+      }
+      if (willPublishSC) {
+        try {
+          setPublication(await publishSoundcloud(publication.id, sharing));
+        } catch (caught) {
+          failures.push(`SoundCloud : ${caught instanceof ApiError ? caught.message : "échec"}`);
+        }
+      }
+      if (failures.length) setError(failures.join(" · "));
+    } catch (caught) {
+      setError(
+        caught instanceof ApiError
+          ? caught.message
+          : "L’enregistrement des textes a échoué — réessayez.",
+      );
+    } finally {
+      setBusy(null);
+      setConfirmingPublish(false);
+    }
+  }
 
   // Un seul champ, réutilisé selon qu'on part de zéro ou qu'on regénère : les
   // deux emplacements sont mutuellement exclusifs (pochette absente / présente).
@@ -631,7 +705,7 @@ export function CoverStep({ publicationId }: { publicationId: string }) {
             </div>
           ))}
 
-          {meta && (
+          {meta && !allPublished && (
             <section className="mt-2 flex flex-col gap-3 border-t border-current/10 pt-4">
               <div className="flex items-center justify-between gap-3">
                 <h3 className="text-sm font-medium">Textes de publication</h3>
@@ -755,108 +829,157 @@ export function CoverStep({ publicationId }: { publicationId: string }) {
             </section>
           )}
 
-          <div className="mt-2 flex flex-col gap-3 border-t border-current/10 pt-4">
-            <h3 className="text-sm font-medium">Publier sur YouTube</h3>
-            {publication.youtube_url ? (
-              <a
-                href={publication.youtube_url}
-                target="_blank"
-                rel="noreferrer"
-                className="flex items-center gap-2 text-sm font-medium text-green-700 underline underline-offset-2 dark:text-green-400"
-              >
-                <span aria-hidden>✓</span> Publié — voir sur YouTube
-              </a>
-            ) : (
-              <>
-                <label className="flex items-center justify-between gap-3 text-sm">
-                  <span>Visibilité</span>
-                  <select
-                    value={privacy}
-                    onChange={(event) =>
-                      setPrivacy(event.target.value as Privacy)
-                    }
-                    disabled={busy !== null}
-                    className="rounded-lg border border-current/20 bg-transparent px-3 py-2 text-sm"
-                  >
-                    {(["private", "unlisted", "public"] as Privacy[]).map(
-                      (value) => (
-                        <option key={value} value={value}>
-                          {PRIVACY_LABELS[value]}
-                        </option>
-                      ),
-                    )}
-                  </select>
-                </label>
-                <button
-                  type="button"
-                  onClick={() =>
-                    run("publish", () =>
-                      publishYoutube(publication.id, privacy),
-                    )
-                  }
-                  disabled={busy !== null}
-                  className="rounded-lg bg-foreground px-4 py-3 font-medium text-background disabled:cursor-not-allowed disabled:opacity-40"
-                >
-                  {busy === "publish"
-                    ? "Publication en cours…"
-                    : "Publier sur YouTube →"}
-                </button>
-                <p className="text-xs opacity-60">
-                  La vidéo paysage part sur votre chaîne YouTube, avec la
-                  miniature 16:9.
-                </p>
-              </>
-            )}
-          </div>
+          <div className="mt-2 flex flex-col gap-4 border-t border-current/10 pt-4">
+            <h3 className="text-sm font-medium">
+              {allPublished ? "Publié" : "Publier"}
+            </h3>
 
-          <div className="mt-2 flex flex-col gap-3 border-t border-current/10 pt-4">
-            <h3 className="text-sm font-medium">Publier sur SoundCloud</h3>
-            {publication.soundcloud_url ? (
-              <a
-                href={publication.soundcloud_url}
-                target="_blank"
-                rel="noreferrer"
-                className="flex items-center gap-2 text-sm font-medium text-green-700 underline underline-offset-2 dark:text-green-400"
-              >
-                <span aria-hidden>✓</span> Publié — écouter sur SoundCloud
-              </a>
-            ) : (
+            <ul className="flex flex-col gap-3">
+              {/* YouTube — toujours relié (login Google). */}
+              <li className="flex flex-col gap-1.5 rounded-lg border border-current/15 p-3">
+                <div className="flex items-center justify-between gap-3">
+                  <label className="flex items-center gap-2 text-sm font-medium">
+                    {ytPublished ? (
+                      <span
+                        aria-hidden
+                        className="text-green-700 dark:text-green-400"
+                      >
+                        ✓
+                      </span>
+                    ) : (
+                      <input
+                        type="checkbox"
+                        checked={targets.youtube}
+                        onChange={(event) =>
+                          setTargets((t) => ({
+                            ...t,
+                            youtube: event.target.checked,
+                          }))
+                        }
+                        disabled={busy !== null}
+                        className="h-4 w-4"
+                      />
+                    )}
+                    YouTube
+                  </label>
+                  {ytPublished ? (
+                    <a
+                      href={publication.youtube_url ?? "#"}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="text-sm font-medium text-green-700 underline underline-offset-2 dark:text-green-400"
+                    >
+                      Voir
+                    </a>
+                  ) : (
+                    <select
+                      value={privacy}
+                      onChange={(event) =>
+                        setPrivacy(event.target.value as Privacy)
+                      }
+                      disabled={busy !== null || !targets.youtube}
+                      className="rounded-lg border border-current/20 bg-transparent px-3 py-2 text-sm disabled:opacity-40"
+                    >
+                      {(["private", "unlisted", "public"] as Privacy[]).map(
+                        (value) => (
+                          <option key={value} value={value}>
+                            {PRIVACY_LABELS[value]}
+                          </option>
+                        ),
+                      )}
+                    </select>
+                  )}
+                </div>
+                {!ytPublished && (
+                  <p className="text-xs opacity-60">
+                    Vidéo paysage + miniature 16:9.
+                  </p>
+                )}
+              </li>
+
+              {/* SoundCloud — sélectionnable seulement si le compte est relié. */}
+              <li className="flex flex-col gap-1.5 rounded-lg border border-current/15 p-3">
+                <div className="flex items-center justify-between gap-3">
+                  <label className="flex items-center gap-2 text-sm font-medium">
+                    {scPublished ? (
+                      <span
+                        aria-hidden
+                        className="text-green-700 dark:text-green-400"
+                      >
+                        ✓
+                      </span>
+                    ) : (
+                      <input
+                        type="checkbox"
+                        checked={targets.soundcloud && scConnected}
+                        onChange={(event) =>
+                          setTargets((t) => ({
+                            ...t,
+                            soundcloud: event.target.checked,
+                          }))
+                        }
+                        disabled={busy !== null || !scConnected}
+                        className="h-4 w-4"
+                      />
+                    )}
+                    SoundCloud
+                  </label>
+                  {scPublished ? (
+                    <a
+                      href={publication.soundcloud_url ?? "#"}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="text-sm font-medium text-green-700 underline underline-offset-2 dark:text-green-400"
+                    >
+                      Écouter
+                    </a>
+                  ) : scConnected ? (
+                    <select
+                      value={sharing}
+                      onChange={(event) =>
+                        setSharing(event.target.value as Sharing)
+                      }
+                      disabled={busy !== null || !targets.soundcloud}
+                      className="rounded-lg border border-current/20 bg-transparent px-3 py-2 text-sm disabled:opacity-40"
+                    >
+                      {(["private", "public"] as Sharing[]).map((value) => (
+                        <option key={value} value={value}>
+                          {SHARING_LABELS[value]}
+                        </option>
+                      ))}
+                    </select>
+                  ) : null}
+                </div>
+                {!scPublished &&
+                  (scConnected ? (
+                    <p className="text-xs opacity-60">
+                      Audio + artwork carré + tags.
+                    </p>
+                  ) : (
+                    <p className="text-xs opacity-60">
+                      Reliez SoundCloud dans les{" "}
+                      <a href="/parametres" className="underline">
+                        paramètres
+                      </a>{" "}
+                      pour l’activer.
+                    </p>
+                  ))}
+              </li>
+            </ul>
+
+            {!allPublished && (
               <>
-                <label className="flex items-center justify-between gap-3 text-sm">
-                  <span>Visibilité</span>
-                  <select
-                    value={sharing}
-                    onChange={(event) =>
-                      setSharing(event.target.value as Sharing)
-                    }
-                    disabled={busy !== null}
-                    className="rounded-lg border border-current/20 bg-transparent px-3 py-2 text-sm"
-                  >
-                    {(["private", "public"] as Sharing[]).map((value) => (
-                      <option key={value} value={value}>
-                        {SHARING_LABELS[value]}
-                      </option>
-                    ))}
-                  </select>
-                </label>
                 <button
                   type="button"
-                  onClick={() =>
-                    run("publish-soundcloud", () =>
-                      publishSoundcloud(publication.id, sharing),
-                    )
-                  }
-                  disabled={busy !== null}
+                  onClick={() => setConfirmingPublish(true)}
+                  disabled={busy !== null || !anyTargetSelected}
                   className="rounded-lg bg-foreground px-4 py-3 font-medium text-background disabled:cursor-not-allowed disabled:opacity-40"
                 >
-                  {busy === "publish-soundcloud"
-                    ? "Publication en cours…"
-                    : "Publier sur SoundCloud →"}
+                  {busy === "publish" ? "Publication en cours…" : "Publier →"}
                 </button>
                 <p className="text-xs opacity-60">
-                  Le morceau audio part sur votre compte SoundCloud, avec
-                  l’artwork carré et les tags. Reliez d’abord SoundCloud dans les
-                  paramètres.
+                  Les textes ci-dessus sont enregistrés puis utilisés à la
+                  publication.
                 </p>
               </>
             )}
@@ -954,6 +1077,53 @@ export function CoverStep({ publicationId }: { publicationId: string }) {
           </button>
         )}
       </footer>
+
+      {confirmingPublish && (
+        // Récap avant d'engager la publication : la mise en ligne sur un compte
+        // public n'est jamais un effet de bord d'un simple clic.
+        <div
+          role="alertdialog"
+          aria-modal="true"
+          aria-label="Confirmer la publication"
+          className="fixed inset-x-0 bottom-0 z-50 flex justify-center p-4"
+        >
+          <div className="flex w-full max-w-md flex-col gap-3 rounded-xl border border-current/15 bg-background p-4 shadow-lg">
+            <div>
+              <p className="text-sm font-medium">
+                Publier «{" "}
+                {meta?.youtube_title?.trim() || publication.title} » ?
+              </p>
+              <ul className="mt-2 flex flex-col gap-1 text-xs opacity-70">
+                {willPublishYT && <li>YouTube — {PRIVACY_LABELS[privacy]}</li>}
+                {willPublishSC && (
+                  <li>SoundCloud — {SHARING_LABELS[sharing]}</li>
+                )}
+              </ul>
+              <p className="mt-2 text-xs opacity-60">
+                Les textes ci-dessus seront enregistrés puis utilisés.
+              </p>
+            </div>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => setConfirmingPublish(false)}
+                disabled={busy !== null}
+                className="flex-1 rounded-lg border border-current/20 px-4 py-2.5 text-sm font-medium disabled:opacity-40"
+              >
+                Annuler
+              </button>
+              <button
+                type="button"
+                onClick={handlePublish}
+                disabled={busy !== null}
+                className="flex-1 rounded-lg bg-foreground px-4 py-2.5 text-sm font-medium text-background disabled:opacity-60"
+              >
+                {busy === "publish" ? "Publication…" : "Publier"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {pendingAction && (
         // Toast de confirmation : on n'exécute l'action qu'après un second geste
