@@ -551,6 +551,16 @@ export function CoverStep({ publicationId }: { publicationId: string }) {
         </div>
       )}
 
+      {hasCovers && publication.image_prompt && (
+        // Prompt ayant produit les pochettes (absent si image importée).
+        <div className="mb-4 rounded-lg border border-current/15 bg-current/5 p-3">
+          <p className="text-xs font-medium opacity-60">Prompt de génération</p>
+          <p className="mt-1 whitespace-pre-wrap text-sm">
+            {publication.image_prompt}
+          </p>
+        </div>
+      )}
+
       {hasCovers && (
         // Empilement vertical : sur téléphone, un défilement horizontal
         // cachait les visuels suivants. Chaque aperçu s'agrandit au clic.

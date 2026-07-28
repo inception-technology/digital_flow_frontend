@@ -69,6 +69,7 @@ export type Publication = {
   image_generations: number;
   remaining_generations: number;
   covers: CoverFormat[];
+  image_prompt: string | null;
   cover_history: CoverSet[];
   videos: VideoFormat[];
   render_error: string | null;
