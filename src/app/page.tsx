@@ -7,6 +7,7 @@ import {
   fetchProfile,
   fetchPublications,
   loginUrl,
+  soundcloudLoginUrl,
   type Profile,
   type PublicationSummary,
 } from "@/lib/api";
@@ -14,10 +15,11 @@ import {
 // Plateformes visées par le produit. La clé est celle renvoyée par le backend
 // dans `connected_platforms` (une plateforme y figure dès qu'un jeton est stocké
 // pour elle). YouTube est relié d'office via le login Google ; SoundCloud se
-// relie séparément dans les paramètres ; TikTok n'est pas encore branché.
-const PLATFORMS = [
+// relie séparément (`connectUrl` — le seul flow de liaison disponible depuis le
+// front) ; TikTok n'est pas encore branché.
+const PLATFORMS: { key: string; label: string; connectUrl?: string }[] = [
   { key: "youtube", label: "YouTube" },
-  { key: "soundcloud", label: "SoundCloud" },
+  { key: "soundcloud", label: "SoundCloud", connectUrl: soundcloudLoginUrl },
   { key: "tiktok", label: "TikTok" },
 ];
 
@@ -163,7 +165,7 @@ export default function HomePage() {
       <section className="mb-8">
         <h2 className="mb-2 text-sm font-medium">Plateformes</h2>
         <ul className="flex flex-col gap-2">
-          {PLATFORMS.map(({ key, label }) => {
+          {PLATFORMS.map(({ key, label, connectUrl }) => {
             const connected = profile.connected_platforms.includes(key);
             return (
               <li
@@ -175,6 +177,13 @@ export default function HomePage() {
                   <span className="flex items-center gap-1 text-sm font-medium text-green-700 dark:text-green-400">
                     <span aria-hidden>✓</span> Connectée
                   </span>
+                ) : connectUrl ? (
+                  <a
+                    href={connectUrl}
+                    className="text-sm font-medium underline underline-offset-2"
+                  >
+                    Connecter
+                  </a>
                 ) : (
                   <span className="text-sm opacity-50">Non connectée</span>
                 )}
