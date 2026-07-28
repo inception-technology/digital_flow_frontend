@@ -302,6 +302,7 @@ export function CoverStep({ publicationId }: { publicationId: string }) {
   const willPublishSC = targets.soundcloud && !scPublished && scConnected;
   const anyTargetSelected = willPublishYT || willPublishSC;
   const allPublished = ytPublished && scPublished;
+  const anyPublished = ytPublished || scPublished;
 
   async function handlePublish() {
     if (!publication) return;
@@ -705,7 +706,7 @@ export function CoverStep({ publicationId }: { publicationId: string }) {
             </div>
           ))}
 
-          {meta && !allPublished && (
+          {meta && !anyPublished && (
             <section className="mt-2 flex flex-col gap-3 border-t border-current/10 pt-4">
               <div className="flex items-center justify-between gap-3">
                 <h3 className="text-sm font-medium">Textes de publication</h3>
@@ -826,6 +827,68 @@ export function CoverStep({ publicationId }: { publicationId: string }) {
               <p className="text-xs opacity-60">
                 Le titre et la description YouTube servent à la publication.
               </p>
+            </section>
+          )}
+
+          {anyPublished && (
+            // Récap en lecture seule de ce qui a réellement été publié, par
+            // plateforme effectivement mise en ligne.
+            <section className="mt-2 flex flex-col gap-4 border-t border-current/10 pt-4">
+              <h3 className="text-sm font-medium">Textes publiés</h3>
+
+              {ytPublished && (
+                <div className="flex flex-col gap-2">
+                  <p className="text-xs font-medium opacity-70">YouTube</p>
+                  <div>
+                    <p className="text-xs opacity-60">Titre</p>
+                    <p className="mt-0.5 text-sm">
+                      {publication.metadata.youtube_title || publication.title}
+                    </p>
+                  </div>
+                  {publication.metadata.youtube_description && (
+                    <div>
+                      <p className="text-xs opacity-60">Description</p>
+                      <p className="mt-0.5 whitespace-pre-wrap text-sm">
+                        {publication.metadata.youtube_description}
+                      </p>
+                    </div>
+                  )}
+                  {publication.metadata.youtube_tags.length > 0 && (
+                    <div>
+                      <p className="text-xs opacity-60">Hashtags</p>
+                      <p className="mt-0.5 text-sm">
+                        {publication.metadata.youtube_tags
+                          .map((tag) => `#${tag}`)
+                          .join(" ")}
+                      </p>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {scPublished && (
+                <div className="flex flex-col gap-2">
+                  <p className="text-xs font-medium opacity-70">SoundCloud</p>
+                  {publication.metadata.soundcloud_description && (
+                    <div>
+                      <p className="text-xs opacity-60">Description</p>
+                      <p className="mt-0.5 whitespace-pre-wrap text-sm">
+                        {publication.metadata.soundcloud_description}
+                      </p>
+                    </div>
+                  )}
+                  {publication.metadata.soundcloud_tags.length > 0 && (
+                    <div>
+                      <p className="text-xs opacity-60">Hashtags</p>
+                      <p className="mt-0.5 text-sm">
+                        {publication.metadata.soundcloud_tags
+                          .map((tag) => `#${tag}`)
+                          .join(" ")}
+                      </p>
+                    </div>
+                  )}
+                </div>
+              )}
             </section>
           )}
 
