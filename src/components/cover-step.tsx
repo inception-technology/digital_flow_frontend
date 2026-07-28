@@ -22,6 +22,7 @@ import {
   publishYoutube,
   startRender,
   updateMetadata,
+  updatePublication,
   uploadCover,
   type CoverFormat,
   type Privacy,
@@ -32,6 +33,7 @@ import {
   type YoutubePlaylist,
 } from "@/lib/api";
 import { checkCoverDimensions, readImageSize } from "@/lib/image";
+import { MUSIC_STYLES } from "@/lib/constants";
 
 const RATIO_LABELS: Record<string, string> = {
   "16:9": "Miniature YouTube",
@@ -62,6 +64,7 @@ type Busy =
   | null
   | "generation"
   | "covers"
+  | "edit"
   | "upload"
   | "render"
   | "publish"
@@ -169,6 +172,13 @@ export function CoverStep({ publicationId }: { publicationId: string }) {
   // Logo « split » incrusté sur les trois pochettes. Coché par défaut ; se
   // bascule sans regénérer l'image (l'habillage ne refacture rien).
   const [addLogo, setAddLogo] = useState(true);
+  // Correction des infos du morceau (titre / artiste / style) en cas de faute
+  // de saisie. `editing` ouvre le formulaire inline ; les brouillons ci-dessous
+  // sont initialisés à l'ouverture.
+  const [editing, setEditing] = useState(false);
+  const [editTitle, setEditTitle] = useState("");
+  const [editArtist, setEditArtist] = useState("");
+  const [editStyle, setEditStyle] = useState("");
   const [privacy, setPrivacy] = useState<Privacy>("private");
   const [sharing, setSharing] = useState<Sharing>("private");
   // Récap de publication (JALON 3) : plateformes reliées au compte, cibles
@@ -301,6 +311,48 @@ export function CoverStep({ publicationId }: { publicationId: string }) {
     setError(null);
     try {
       setPublication(await action());
+    } catch (caught) {
+      setError(
+        caught instanceof ApiError
+          ? caught.message
+          : "L’opération a échoué — réessayez.",
+      );
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  function openEdit() {
+    if (!publication) return;
+    setEditTitle(publication.title);
+    setEditArtist(publication.artist_name);
+    setEditStyle(publication.style);
+    setError(null);
+    setEditing(true);
+  }
+
+  async function saveEdit() {
+    if (!publication) return;
+    const title = editTitle.trim();
+    const artist = editArtist.trim();
+    if (!title || !artist) {
+      setError("Le titre et le nom d’artiste ne peuvent pas être vides.");
+      return;
+    }
+    const patch: { title?: string; artist_name?: string; style?: string } = {};
+    if (title !== publication.title) patch.title = title;
+    if (artist !== publication.artist_name) patch.artist_name = artist;
+    if (editStyle !== publication.style) patch.style = editStyle;
+    // Rien n'a changé : on ferme sans appeler le serveur.
+    if (Object.keys(patch).length === 0) {
+      setEditing(false);
+      return;
+    }
+    setBusy("edit");
+    setError(null);
+    try {
+      setPublication(await updatePublication(publication.id, patch));
+      setEditing(false);
     } catch (caught) {
       setError(
         caught instanceof ApiError
@@ -538,11 +590,89 @@ export function CoverStep({ publicationId }: { publicationId: string }) {
   return (
     <main className="mx-auto w-full max-w-md flex-1 p-6">
       <header className="mb-8">
-        <h1 className="text-2xl font-semibold">{publication.title}</h1>
-        <p className="mt-1 text-sm opacity-60">
-          Étape 2 sur 3 — les visuels · {publication.artist_name} ·{" "}
-          {publication.style}
-        </p>
+        {editing ? (
+          <div className="flex flex-col gap-3 rounded-lg border border-current/15 p-4">
+            <p className="text-sm font-medium">Corriger les infos du morceau</p>
+            <label className="flex flex-col gap-1 text-sm">
+              <span className="font-medium">Titre</span>
+              <input
+                value={editTitle}
+                onChange={(event) => setEditTitle(event.target.value)}
+                maxLength={120}
+                disabled={busy !== null}
+                className="rounded-lg border border-current/20 bg-transparent px-3 py-2 disabled:opacity-40"
+              />
+            </label>
+            <label className="flex flex-col gap-1 text-sm">
+              <span className="font-medium">Nom d’artiste</span>
+              <input
+                value={editArtist}
+                onChange={(event) => setEditArtist(event.target.value)}
+                maxLength={120}
+                disabled={busy !== null}
+                className="rounded-lg border border-current/20 bg-transparent px-3 py-2 disabled:opacity-40"
+              />
+            </label>
+            <label className="flex flex-col gap-1 text-sm">
+              <span className="font-medium">Style</span>
+              <select
+                value={editStyle}
+                onChange={(event) => setEditStyle(event.target.value)}
+                disabled={busy !== null}
+                className="rounded-lg border border-current/20 bg-transparent px-3 py-2 disabled:opacity-40"
+              >
+                {MUSIC_STYLES.map((name) => (
+                  <option key={name} value={name}>
+                    {name}
+                  </option>
+                ))}
+              </select>
+            </label>
+            {hasCovers && (
+              <p className="text-xs opacity-60">
+                Après un changement de titre ou de style, régénérez les pochettes
+                et les textes pour qu’ils suivent.
+              </p>
+            )}
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={saveEdit}
+                disabled={busy !== null}
+                className="rounded-lg bg-foreground px-4 py-2 text-sm font-medium text-background disabled:opacity-40"
+              >
+                {busy === "edit" ? "Enregistrement…" : "Enregistrer"}
+              </button>
+              <button
+                type="button"
+                onClick={() => setEditing(false)}
+                disabled={busy !== null}
+                className="rounded-lg border border-current/20 px-4 py-2 text-sm disabled:opacity-40"
+              >
+                Annuler
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0">
+              <h1 className="text-2xl font-semibold">{publication.title}</h1>
+              <p className="mt-1 text-sm opacity-60">
+                Étape 2 sur 3 — les visuels · {publication.artist_name} ·{" "}
+                {publication.style}
+              </p>
+            </div>
+            {!isPublished && (
+              <button
+                type="button"
+                onClick={openEdit}
+                className="shrink-0 text-sm font-medium underline underline-offset-2"
+              >
+                Modifier
+              </button>
+            )}
+          </div>
+        )}
       </header>
 
       {!hasCovers && !hasSource && (

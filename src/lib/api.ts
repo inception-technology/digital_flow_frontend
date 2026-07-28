@@ -247,6 +247,21 @@ export function updateMetadata(
 }
 
 /**
+ * Corrige titre, nom d'artiste ou style d'un morceau pas encore publié
+ * (rattraper une faute de saisie). Seuls les champs fournis changent. Refusé
+ * côté serveur (409) une fois le morceau publié.
+ */
+export function updatePublication(
+  id: string,
+  patch: { title?: string; artist_name?: string; style?: string },
+): Promise<Publication> {
+  return request(`/api/publications/${id}`, {
+    method: "PATCH",
+    body: JSON.stringify(patch),
+  });
+}
+
+/**
  * Publie la vidéo paysage sur la chaîne YouTube du créateur. `privacy` par
  * défaut « private » côté serveur — on l'explicite ici.
  */
