@@ -731,6 +731,13 @@ export function CoverStep({ publicationId }: { publicationId: string }) {
             alt="Image générée, avant habillage"
             className="w-full rounded-lg border border-current/10"
           />
+          <a
+            href={publication.image_source!}
+            download
+            className="text-sm font-medium underline underline-offset-2"
+          >
+            Télécharger l’image source
+          </a>
 
           {publication.image_prompt && (
             <div className="rounded-lg border border-current/15 bg-current/5 p-3">
@@ -864,7 +871,9 @@ export function CoverStep({ publicationId }: { publicationId: string }) {
           href={coversDownloadUrl(publication.id)}
           className={`${ACTION} mb-6 block text-center`}
         >
-          Télécharger les 3 pochettes (zip)
+          {hasSource
+            ? "Télécharger les 4 images (source + 3 pochettes, zip)"
+            : "Télécharger les 3 pochettes (zip)"}
         </a>
       )}
 
