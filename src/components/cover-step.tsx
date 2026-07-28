@@ -14,6 +14,7 @@ import {
   fetchProfile,
   fetchPublication,
   fetchRenderStatus,
+  fetchYoutubePlaylists,
   generateCover,
   generateMetadata,
   publishSoundcloud,
@@ -26,6 +27,7 @@ import {
   type Publication,
   type PublicationMetadata,
   type Sharing,
+  type YoutubePlaylist,
 } from "@/lib/api";
 import { checkCoverDimensions, readImageSize } from "@/lib/image";
 
@@ -109,6 +111,37 @@ const SHARING_LABELS: Record<Sharing, string> = {
   private: "Privé",
 };
 
+// Genre SoundCloud par défaut selon le style du morceau (SoundCloud n'a pas de
+// liste d'API — champ texte libre, on propose une liste + une valeur de départ).
+const STYLE_GENRE: Record<string, string> = {
+  RAP: "Hip-hop & Rap",
+  RNB: "R&B & Soul",
+  DRILL: "Drill",
+  AFROTRAP: "Afrobeats",
+  BOUNCE: "Dancehall",
+  FUNK: "Funk",
+};
+
+const SOUNDCLOUD_GENRES = [
+  "Hip-hop & Rap",
+  "R&B & Soul",
+  "Trap",
+  "Drill",
+  "Afrobeats",
+  "Dancehall",
+  "Reggaeton",
+  "Pop",
+  "Electronic",
+  "House",
+  "Funk",
+  "Soul",
+  "Jazz & Blues",
+  "Reggae",
+  "Rock",
+  "Latin",
+  "World",
+];
+
 export function CoverStep({ publicationId }: { publicationId: string }) {
   const router = useRouter();
   const [publication, setPublication] = useState<Publication | null>(null);
@@ -132,6 +165,11 @@ export function CoverStep({ publicationId }: { publicationId: string }) {
   const [connectedPlatforms, setConnectedPlatforms] = useState<string[]>([]);
   const [targets, setTargets] = useState({ youtube: true, soundcloud: true });
   const [confirmingPublish, setConfirmingPublish] = useState(false);
+  // Cibles fines : playlist YouTube (chargée à la demande) et genre SoundCloud.
+  const [playlists, setPlaylists] = useState<YoutubePlaylist[] | null>(null);
+  const [playlistId, setPlaylistId] = useState("");
+  const [genre, setGenre] = useState("");
+  const [genreSeeded, setGenreSeeded] = useState(false);
   const [enlarged, setEnlarged] = useState<CoverFormat | null>(null);
   // Avancement du rendu : nombre de formats prêts + temps écoulé, pour un
   // indicateur vivant pendant les quelques minutes que dure le rendu.
@@ -179,6 +217,22 @@ export function CoverStep({ publicationId }: { publicationId: string }) {
       .catch(() => {});
   }, []);
 
+  // Playlists YouTube : chargées une seule fois, quand la publication YouTube est
+  // possible (vidéos prêtes, compte relié, pas encore publié). En cas d'échec
+  // (scope écriture pas encore accordé, etc.), on tombe sur une liste vide.
+  useEffect(() => {
+    if (playlists !== null || !publication) return;
+    const canPublishYT =
+      publication.videos.length > 0 &&
+      publication.status !== "rendering" &&
+      !publication.youtube_url &&
+      connectedPlatforms.includes("youtube");
+    if (!canPublishYT) return;
+    fetchYoutubePlaylists(publication.id)
+      .then(setPlaylists)
+      .catch(() => setPlaylists([]));
+  }, [publication, connectedPlatforms, playlists]);
+
   // Le rendu vidéo dure plusieurs minutes côté serveur : tant que la
   // publication est en « rendering », on interroge l'état régulièrement
   // jusqu'à « ready » (vidéos prêtes) ou « error ».
@@ -221,6 +275,13 @@ export function CoverStep({ publicationId }: { publicationId: string }) {
   if (publication && publication.metadata !== metaSource) {
     setMetaSource(publication.metadata);
     setMeta(draftFrom(publication.metadata));
+  }
+
+  // Genre SoundCloud pré-rempli depuis le style, une seule fois (ajustement en
+  // rendu, pas d'effet — évite une désync d'hydratation).
+  if (publication && !genreSeeded) {
+    setGenreSeeded(true);
+    setGenre(STYLE_GENRE[publication.style] ?? publication.style);
   }
 
   async function run(kind: Busy, action: () => Promise<Publication>) {
@@ -328,14 +389,14 @@ export function CoverStep({ publicationId }: { publicationId: string }) {
       // l'autre. La réponse de chaque appel porte l'état à jour cumulé.
       if (willPublishYT) {
         try {
-          setPublication(await publishYoutube(publication.id, privacy));
+          setPublication(await publishYoutube(publication.id, privacy, playlistId));
         } catch (caught) {
           failures.push(`YouTube : ${caught instanceof ApiError ? caught.message : "échec"}`);
         }
       }
       if (willPublishSC) {
         try {
-          setPublication(await publishSoundcloud(publication.id, sharing));
+          setPublication(await publishSoundcloud(publication.id, sharing, genre));
         } catch (caught) {
           failures.push(`SoundCloud : ${caught instanceof ApiError ? caught.message : "échec"}`);
         }
@@ -953,6 +1014,24 @@ export function CoverStep({ publicationId }: { publicationId: string }) {
                     </select>
                   )}
                 </div>
+                {!ytPublished && playlists && playlists.length > 0 && (
+                  <label className="flex items-center justify-between gap-3 text-sm">
+                    <span>Playlist</span>
+                    <select
+                      value={playlistId}
+                      onChange={(event) => setPlaylistId(event.target.value)}
+                      disabled={busy !== null || !targets.youtube}
+                      className="max-w-[60%] rounded-lg border border-current/20 bg-transparent px-3 py-2 text-sm disabled:opacity-40"
+                    >
+                      <option value="">Aucune</option>
+                      {playlists.map((list) => (
+                        <option key={list.id} value={list.id}>
+                          {list.title}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                )}
                 {!ytPublished && (
                   <p className="text-xs opacity-60">
                     Vidéo paysage + miniature 16:9.
@@ -1013,6 +1092,23 @@ export function CoverStep({ publicationId }: { publicationId: string }) {
                     </select>
                   ) : null}
                 </div>
+                {!scPublished && scConnected && (
+                  <label className="flex items-center justify-between gap-3 text-sm">
+                    <span>Genre</span>
+                    <input
+                      list="sc-genres"
+                      value={genre}
+                      onChange={(event) => setGenre(event.target.value)}
+                      disabled={busy !== null || !targets.soundcloud}
+                      className="max-w-[60%] rounded-lg border border-current/20 bg-transparent px-3 py-2 text-sm disabled:opacity-40"
+                    />
+                    <datalist id="sc-genres">
+                      {SOUNDCLOUD_GENRES.map((value) => (
+                        <option key={value} value={value} />
+                      ))}
+                    </datalist>
+                  </label>
+                )}
                 {!scPublished &&
                   (scConnected ? (
                     <p className="text-xs opacity-60">

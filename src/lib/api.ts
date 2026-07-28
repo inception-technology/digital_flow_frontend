@@ -230,24 +230,35 @@ export function updateMetadata(
 export function publishYoutube(
   id: string,
   privacy: Privacy,
+  playlistId?: string | null,
 ): Promise<Publication> {
   return request(`/api/publications/${id}/publish/youtube`, {
     method: "POST",
-    body: JSON.stringify({ privacy }),
+    body: JSON.stringify({ privacy, playlist_id: playlistId || null }),
   });
+}
+
+/** Une playlist YouTube du créateur (pour en choisir une avant publication). */
+export type YoutubePlaylist = { id: string; title: string };
+
+/** Playlists du compte YouTube — pour le menu déroulant du JALON 3. */
+export function fetchYoutubePlaylists(id: string): Promise<YoutubePlaylist[]> {
+  return request(`/api/publications/${id}/youtube/playlists`);
 }
 
 /**
  * Publie le morceau (audio d'origine + artwork 1:1) sur le compte SoundCloud du
  * créateur. `sharing` par défaut « private » côté serveur — on l'explicite ici.
+ * `genre` est un texte libre (SoundCloud n'a pas de liste canonique).
  */
 export function publishSoundcloud(
   id: string,
   sharing: Sharing,
+  genre?: string | null,
 ): Promise<Publication> {
   return request(`/api/publications/${id}/publish/soundcloud`, {
     method: "POST",
-    body: JSON.stringify({ sharing }),
+    body: JSON.stringify({ sharing, genre: genre?.trim() || null }),
   });
 }
 
