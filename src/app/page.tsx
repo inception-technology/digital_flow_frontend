@@ -12,8 +12,9 @@ import {
 } from "@/lib/api";
 
 // Plateformes visées par le produit. La clé est celle renvoyée par le backend
-// dans `connected_platforms` ; SoundCloud et TikTok ne sont pas encore
-// branchés, ils apparaissent donc simplement comme non connectés.
+// dans `connected_platforms` (une plateforme y figure dès qu'un jeton est stocké
+// pour elle). YouTube est relié d'office via le login Google ; SoundCloud se
+// relie séparément dans les paramètres ; TikTok n'est pas encore branché.
 const PLATFORMS = [
   { key: "youtube", label: "YouTube" },
   { key: "soundcloud", label: "SoundCloud" },
