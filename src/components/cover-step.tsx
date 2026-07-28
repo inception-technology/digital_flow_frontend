@@ -724,18 +724,18 @@ export function CoverStep({ publicationId }: { publicationId: string }) {
         // montre en grand, puis « Générer pochettes » la décline et l'habille.
         <div className="mb-6 flex flex-col gap-4 rounded-lg border border-current/15 p-4">
           <div>
-            <p className="text-sm font-medium">Validez l’image générée</p>
+            <p className="text-sm font-medium">Validez l’image</p>
             <p className="mt-1 text-xs opacity-60">
-              Elle sera rognée dans les trois formats, avec le titre, le nom
-              d’artiste et (au choix) le logo incrustés.
+              Générée ou importée, elle sera rognée dans les trois formats, avec
+              le titre, le nom d’artiste et (au choix) le logo incrustés.
             </p>
           </div>
 
-          {/* Aperçu de la source paysage — image distante signée, courte durée. */}
+          {/* Aperçu de la source — image distante signée, courte durée. */}
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
             src={publication.image_source!}
-            alt="Image générée, avant habillage"
+            alt="Image à valider, avant habillage"
             className="w-full rounded-lg border border-current/10"
           />
           <a
