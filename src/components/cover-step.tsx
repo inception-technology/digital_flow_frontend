@@ -406,6 +406,13 @@ export function CoverStep({ publicationId }: { publicationId: string }) {
   // génération ; c'est l'étape où le créateur valide avant « Générer pochettes ».
   const hasSource = !!publication.image_source;
   const noGenerationsLeft = publication.remaining_generations === 0;
+  // Le titre et l'artiste sont incrustés dans les pochettes : on ne les édite
+  // que tant que ces pochettes restent régénérables. Une vidéo rendue (ou en
+  // cours), ou un projet publié, les fige — le titre n'est alors plus modifiable.
+  const coversFrozen =
+    publication.status === "published" ||
+    publication.status === "rendering" ||
+    publication.videos.length > 0;
 
   const videos = [...publication.videos].sort(
     (a, b) =>
@@ -662,7 +669,7 @@ export function CoverStep({ publicationId }: { publicationId: string }) {
                 {publication.style}
               </p>
             </div>
-            {!isPublished && (
+            {!coversFrozen && (
               <button
                 type="button"
                 onClick={openEdit}
