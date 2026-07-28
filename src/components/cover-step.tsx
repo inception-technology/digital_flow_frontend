@@ -16,6 +16,7 @@ import {
   fetchRenderStatus,
   fetchYoutubePlaylists,
   generateCover,
+  generateCovers,
   generateMetadata,
   publishSoundcloud,
   publishYoutube,
@@ -60,6 +61,7 @@ function formatElapsed(seconds: number): string {
 type Busy =
   | null
   | "generation"
+  | "covers"
   | "upload"
   | "render"
   | "publish"
@@ -164,6 +166,9 @@ export function CoverStep({ publicationId }: { publicationId: string }) {
   const [prompt, setPrompt] = useState("");
   const [useTitle, setUseTitle] = useState(true);
   const [useStyle, setUseStyle] = useState(true);
+  // Logo « split » incrusté sur les trois pochettes. Coché par défaut ; se
+  // bascule sans regénérer l'image (l'habillage ne refacture rien).
+  const [addLogo, setAddLogo] = useState(true);
   const [privacy, setPrivacy] = useState<Privacy>("private");
   const [sharing, setSharing] = useState<Sharing>("private");
   // Récap de publication (JALON 3) : plateformes reliées au compte, cibles
@@ -345,6 +350,9 @@ export function CoverStep({ publicationId }: { publicationId: string }) {
     (a, b) => RATIO_ORDER.indexOf(a.ratio) - RATIO_ORDER.indexOf(b.ratio),
   );
   const hasCovers = covers.length > 0;
+  // Image source paysage générée, en attente d'habillage. Présente dès la
+  // génération ; c'est l'étape où le créateur valide avant « Générer pochettes ».
+  const hasSource = !!publication.image_source;
   const noGenerationsLeft = publication.remaining_generations === 0;
 
   const videos = [...publication.videos].sort(
@@ -478,6 +486,21 @@ export function CoverStep({ publicationId }: { publicationId: string }) {
     </fieldset>
   );
 
+  // Case du logo, réutilisée à la validation et lors d'un ré-habillage : cocher
+  // ou décocher n'appelle que l'habillage (Pillow), jamais le modèle.
+  const logoToggle = (
+    <label className="flex items-center gap-2 text-sm">
+      <input
+        type="checkbox"
+        checked={addLogo}
+        onChange={(event) => setAddLogo(event.target.checked)}
+        disabled={busy !== null}
+        className="h-4 w-4"
+      />
+      Incruster le logo sur les pochettes
+    </label>
+  );
+
   // Un bouton d'import réutilisé sur l'écran initial et parmi les actions. La
   // dimension est vérifiée avant l'envoi : trop petite, l'image donnerait des
   // variantes floues une fois rognée dans les trois formats.
@@ -522,11 +545,12 @@ export function CoverStep({ publicationId }: { publicationId: string }) {
         </p>
       </header>
 
-      {!hasCovers && (
+      {!hasCovers && !hasSource && (
         <div className="mb-6 flex flex-col gap-3 rounded-lg border border-current/15 p-4">
           <p className="text-sm">
-            Une pochette va être créée à partir du titre et du style, puis
-            déclinée automatiquement dans les trois formats.
+            Une image va être créée à partir du titre et du style. Vous la
+            validerez avant qu’elle ne soit déclinée et habillée dans les trois
+            formats.
           </p>
           {promptField}
           {promptSources}
@@ -540,9 +564,7 @@ export function CoverStep({ publicationId }: { publicationId: string }) {
             disabled={busy !== null}
             className="rounded-lg bg-foreground px-4 py-3 font-medium text-background disabled:opacity-40"
           >
-            {busy === "generation"
-              ? "Création en cours…"
-              : "Créer la pochette"}
+            {busy === "generation" ? "Création en cours…" : "Créer l’image"}
           </button>
           <p className="text-xs opacity-60">
             Cela prend une trentaine de secondes.
@@ -557,6 +579,76 @@ export function CoverStep({ publicationId }: { publicationId: string }) {
           <p className="text-xs opacity-60">
             png, jpg ou webp · au moins 1080×1080 px pour les trois formats.
           </p>
+        </div>
+      )}
+
+      {!hasCovers && hasSource && (
+        // Validation de l'image source **avant** rognage et habillage : on la
+        // montre en grand, puis « Générer pochettes » la décline et l'habille.
+        <div className="mb-6 flex flex-col gap-4 rounded-lg border border-current/15 p-4">
+          <div>
+            <p className="text-sm font-medium">Validez l’image générée</p>
+            <p className="mt-1 text-xs opacity-60">
+              Elle sera rognée dans les trois formats, avec le titre, le nom
+              d’artiste et (au choix) le logo incrustés.
+            </p>
+          </div>
+
+          {/* Aperçu de la source paysage — image distante signée, courte durée. */}
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={publication.image_source!}
+            alt="Image générée, avant habillage"
+            className="w-full rounded-lg border border-current/10"
+          />
+
+          {publication.image_prompt && (
+            <div className="rounded-lg border border-current/15 bg-current/5 p-3">
+              <p className="text-xs font-medium opacity-60">Prompt de génération</p>
+              <p className="mt-1 whitespace-pre-wrap text-sm">
+                {publication.image_prompt}
+              </p>
+            </div>
+          )}
+
+          {logoToggle}
+
+          <button
+            type="button"
+            onClick={() =>
+              run("covers", () => generateCovers(publication.id, { addLogo }))
+            }
+            disabled={busy !== null}
+            className="rounded-lg bg-foreground px-4 py-3 font-medium text-background disabled:opacity-40"
+          >
+            {busy === "covers" ? "Création des pochettes…" : "Générer pochettes"}
+          </button>
+
+          <div className="flex items-center gap-3 text-xs opacity-50">
+            <span className="h-px flex-1 bg-current/20" />
+            sinon
+            <span className="h-px flex-1 bg-current/20" />
+          </div>
+
+          {!noGenerationsLeft && promptField}
+          {!noGenerationsLeft && promptSources}
+          <button
+            type="button"
+            onClick={() =>
+              run("generation", () =>
+                generateCover(publication.id, { prompt, useTitle, useStyle }),
+              )
+            }
+            disabled={busy !== null || noGenerationsLeft}
+            className={ACTION}
+          >
+            {busy === "generation"
+              ? "Création en cours…"
+              : noGenerationsLeft
+                ? "Plus de regénération disponible"
+                : `Regénérer l’image (${publication.remaining_generations} restantes)`}
+          </button>
+          {coverUpload("Importer ma propre image")}
         </div>
       )}
 
@@ -1186,6 +1278,28 @@ export function CoverStep({ publicationId }: { publicationId: string }) {
         <div className="flex flex-col gap-3">
           {hasCovers && !isRendering && (
             <>
+              {/* Ré-habillage à partir de la même image (basculer le logo) —
+                  gratuit : n'appelle que Pillow, pas le modèle. */}
+              {hasSource && (
+                <>
+                  {logoToggle}
+                  <button
+                    type="button"
+                    onClick={() =>
+                      run("covers", () =>
+                        generateCovers(publication.id, { addLogo }),
+                      )
+                    }
+                    disabled={busy !== null}
+                    className={ACTION}
+                  >
+                    {busy === "covers"
+                      ? "Mise à jour des pochettes…"
+                      : "Régénérer les pochettes (habillage)"}
+                  </button>
+                </>
+              )}
+
               {!noGenerationsLeft && promptField}
               {!noGenerationsLeft && promptSources}
               <button
@@ -1202,7 +1316,7 @@ export function CoverStep({ publicationId }: { publicationId: string }) {
                   ? "Création en cours…"
                   : noGenerationsLeft
                     ? "Plus de regénération disponible"
-                    : `Regénérer (${publication.remaining_generations} restantes)`}
+                    : `Regénérer l’image (${publication.remaining_generations} restantes)`}
               </button>
 
               {coverUpload("Utiliser ma propre image")}

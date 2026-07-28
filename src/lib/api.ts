@@ -69,6 +69,11 @@ export type Publication = {
   image_generations: number;
   remaining_generations: number;
   covers: CoverFormat[];
+  /**
+   * Image source paysage générée, à valider avant l'habillage. Présente dès la
+   * génération ; nulle après un import de pochette (pas de source générée).
+   */
+  image_source: string | null;
   image_prompt: string | null;
   cover_history: CoverSet[];
   videos: VideoFormat[];
@@ -167,7 +172,10 @@ export function fetchPublications(
 }
 
 /**
- * Génère une pochette.
+ * Génère l'image source **paysage** de la pochette (étape 1/2).
+ *
+ * On ne rogne ni n'habille encore : le créateur valide d'abord cette source
+ * (`image_source`), puis `generateCovers` en tire les trois formats habillés.
  *
  * `prompt` est une direction créative libre : si fournie, elle remplace
  * l'ambiance dérivée du style, en gardant les garde-fous du service (sujet
@@ -186,6 +194,20 @@ export function generateCover(
       use_title: options.useTitle ?? true,
       use_style: options.useStyle ?? true,
     }),
+  });
+}
+
+/**
+ * Décline la source validée en trois pochettes habillées (étape 2/2).
+ *
+ * Rogne l'image source paysage et incruste titre, nom d'artiste et (au choix)
+ * logo sur chaque format. Ne consomme aucune génération : la source est déjà
+ * facturée. Rejouable pour basculer le logo sans regénérer l'image.
+ */
+export function generateCovers(id: string, options: { addLogo?: boolean } = {}): Promise<Publication> {
+  return request(`/api/publications/${id}/covers`, {
+    method: "POST",
+    body: JSON.stringify({ add_logo: options.addLogo ?? true }),
   });
 }
 
