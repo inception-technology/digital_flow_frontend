@@ -228,14 +228,18 @@ export function updateMetadata(
  * Publie la vidéo paysage sur la chaîne YouTube du créateur. `privacy` par
  * défaut « private » côté serveur — on l'explicite ici.
  */
+/** Langue de la vidéo YouTube (métadonnées + audio). */
+export type VideoLanguage = "fr" | "en";
+
 export function publishYoutube(
   id: string,
   privacy: Privacy,
   playlistId?: string | null,
+  language: VideoLanguage = "fr",
 ): Promise<Publication> {
   return request(`/api/publications/${id}/publish/youtube`, {
     method: "POST",
-    body: JSON.stringify({ privacy, playlist_id: playlistId || null }),
+    body: JSON.stringify({ privacy, playlist_id: playlistId || null, language }),
   });
 }
 

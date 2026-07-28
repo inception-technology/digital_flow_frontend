@@ -27,6 +27,7 @@ import {
   type Publication,
   type PublicationMetadata,
   type Sharing,
+  type VideoLanguage,
   type YoutubePlaylist,
 } from "@/lib/api";
 import { checkCoverDimensions, readImageSize } from "@/lib/image";
@@ -111,6 +112,11 @@ const SHARING_LABELS: Record<Sharing, string> = {
   private: "Privé",
 };
 
+const LANGUAGE_LABELS: Record<VideoLanguage, string> = {
+  fr: "Français",
+  en: "English",
+};
+
 // Genre SoundCloud par défaut selon le style du morceau (SoundCloud n'a pas de
 // liste d'API — champ texte libre, on propose une liste + une valeur de départ).
 const STYLE_GENRE: Record<string, string> = {
@@ -168,6 +174,7 @@ export function CoverStep({ publicationId }: { publicationId: string }) {
   // Cibles fines : playlist YouTube (chargée à la demande) et genre SoundCloud.
   const [playlists, setPlaylists] = useState<YoutubePlaylist[] | null>(null);
   const [playlistId, setPlaylistId] = useState("");
+  const [language, setLanguage] = useState<VideoLanguage>("fr");
   const [genre, setGenre] = useState("");
   const [genreSeeded, setGenreSeeded] = useState(false);
   const [enlarged, setEnlarged] = useState<CoverFormat | null>(null);
@@ -389,7 +396,9 @@ export function CoverStep({ publicationId }: { publicationId: string }) {
       // l'autre. La réponse de chaque appel porte l'état à jour cumulé.
       if (willPublishYT) {
         try {
-          setPublication(await publishYoutube(publication.id, privacy, playlistId));
+          setPublication(
+            await publishYoutube(publication.id, privacy, playlistId, language),
+          );
         } catch (caught) {
           failures.push(`YouTube : ${caught instanceof ApiError ? caught.message : "échec"}`);
         }
@@ -1024,6 +1033,25 @@ export function CoverStep({ publicationId }: { publicationId: string }) {
                     </select>
                   )}
                 </div>
+                {!ytPublished && (
+                  <label className="flex items-center justify-between gap-3 text-sm">
+                    <span>Langue</span>
+                    <select
+                      value={language}
+                      onChange={(event) =>
+                        setLanguage(event.target.value as VideoLanguage)
+                      }
+                      disabled={busy !== null || !targets.youtube}
+                      className="rounded-lg border border-current/20 bg-transparent px-3 py-2 text-sm disabled:opacity-40"
+                    >
+                      {(["fr", "en"] as VideoLanguage[]).map((value) => (
+                        <option key={value} value={value}>
+                          {LANGUAGE_LABELS[value]}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                )}
                 {!ytPublished && playlists && playlists.length > 0 && (
                   <label className="flex items-center justify-between gap-3 text-sm">
                     <span>Playlist</span>
