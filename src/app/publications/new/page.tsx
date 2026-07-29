@@ -29,7 +29,7 @@ type Selection = {
 const FIELD =
   "min-h-12 w-full rounded-lg border border-current/15 bg-transparent px-3 py-2.5 text-base";
 
-const STEPS = ["Audio", "Image", "Vidéo", "Publication"];
+const STEPS = ["Audio", "Image", "Vidéo", "Post"];
 
 export default function NewPublicationPage() {
   const router = useRouter();
@@ -117,6 +117,12 @@ export default function NewPublicationPage() {
       rejectFile(fileCheck.message);
       return;
     }
+
+    // Titre par défaut : le nom du fichier sans extension, tant que le créateur
+    // n'a pas déjà saisi un titre (on ne l'écrase jamais).
+    setTitle((current) =>
+      current.trim() ? current : file.name.replace(/\.[^./\\]+$/, ""),
+    );
 
     // La durée est lue par le lecteur `<audio>` affiché ci-dessous, via son
     // événement `loadedmetadata` — pas par une sonde séparée. Une sonde
