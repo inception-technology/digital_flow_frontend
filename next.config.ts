@@ -1,14 +1,13 @@
 import type { NextConfig } from "next";
 
 // Origine du backend, proxifiée derrière ce même domaine (voir `rewrites`).
-// En production, l'URL publique Railway (pas un secret : c'est l'endpoint
-// de l'API, déjà visible dans les requêtes réseau) ; en local, le backend
-// sur :8000. `BACKEND_ORIGIN` reste une échappatoire (`||` pour ignorer une
-// valeur vide).
+// En production, le domaine public de l'API (pas un secret : c'est l'endpoint,
+// déjà visible dans les requêtes réseau) ; en local, le backend sur :8000.
+// `BACKEND_ORIGIN` reste une échappatoire (`||` pour ignorer une valeur vide).
 const BACKEND_ORIGIN =
   process.env.BACKEND_ORIGIN ||
   (process.env.NODE_ENV === "production"
-    ? "https://digital-flow-media.up.railway.app"
+    ? "https://api.digital-flow-media.net"
     : "http://localhost:8000");
 
 const nextConfig: NextConfig = {
