@@ -325,6 +325,15 @@ export function deleteCover(id: string, ratio: string): Promise<Publication> {
   );
 }
 
+/**
+ * Efface l'image source (générée ou importée) avant habillage, et remet le
+ * compteur de générations à zéro : sert au « repartir de zéro » de l'étape
+ * image. Refusé (409) une fois les visuels figés (vidéo rendue ou publié).
+ */
+export function deleteImageSource(id: string): Promise<Publication> {
+  return request(`/api/publications/${id}/image`, { method: "DELETE" });
+}
+
 /** Lien de téléchargement zip des 3 pochettes actuelles (le backend force le zip). */
 export function coversDownloadUrl(id: string): string {
   return `${API_URL}/api/publications/${id}/covers/download`;
