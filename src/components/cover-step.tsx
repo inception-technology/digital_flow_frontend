@@ -464,7 +464,6 @@ export function CoverStep({ publicationId }: { publicationId: string }) {
   // Image source paysage générée, en attente d'habillage. Présente dès la
   // génération ; c'est l'étape où le créateur valide avant « Générer pochettes ».
   const hasSource = !!publication.image_source;
-  const noGenerationsLeft = publication.remaining_generations === 0;
   // Le titre et l'artiste sont incrustés dans les pochettes : on ne les édite
   // que tant que ces pochettes restent régénérables. Une vidéo rendue (ou en
   // cours), ou un projet publié, les fige — le titre n'est alors plus modifiable.
@@ -918,9 +917,9 @@ export function CoverStep({ publicationId }: { publicationId: string }) {
             <span className="h-px flex-1 bg-current/20" />
           </div>
 
-          {!noGenerationsLeft && promptField}
-          {!noGenerationsLeft && promptSources}
-          {!noGenerationsLeft && referenceField}
+          {promptField}
+          {promptSources}
+          {referenceField}
           <button
             type="button"
             onClick={() =>
@@ -933,14 +932,10 @@ export function CoverStep({ publicationId }: { publicationId: string }) {
                 }),
               )
             }
-            disabled={busy !== null || noGenerationsLeft}
+            disabled={busy !== null}
             className={ACTION}
           >
-            {busy === "generation"
-              ? "Création en cours…"
-              : noGenerationsLeft
-                ? "Plus de regénération disponible"
-                : `Regénérer l’image (${publication.remaining_generations} restantes)`}
+            {busy === "generation" ? "Création en cours…" : "Regénérer l’image"}
           </button>
           {coverUpload("Importer ma propre image")}
         </div>
@@ -1590,29 +1585,25 @@ export function CoverStep({ publicationId }: { publicationId: string }) {
                 </>
               )}
 
-              {!noGenerationsLeft && promptField}
-              {!noGenerationsLeft && promptSources}
-              {!noGenerationsLeft && referenceField}
+              {promptField}
+              {promptSources}
+              {referenceField}
               <button
                 type="button"
                 onClick={() =>
                   run("generation", () =>
-                generateCover(publication.id, {
-                  prompt,
-                  useTitle,
-                  useStyle,
-                  referenceB64: reference?.b64,
-                }),
-              )
+                    generateCover(publication.id, {
+                      prompt,
+                      useTitle,
+                      useStyle,
+                      referenceB64: reference?.b64,
+                    }),
+                  )
                 }
-                disabled={busy !== null || noGenerationsLeft}
+                disabled={busy !== null}
                 className={ACTION}
               >
-                {busy === "generation"
-                  ? "Création en cours…"
-                  : noGenerationsLeft
-                    ? "Plus de regénération disponible"
-                    : `Regénérer l’image (${publication.remaining_generations} restantes)`}
+                {busy === "generation" ? "Création en cours…" : "Regénérer l’image"}
               </button>
 
               {coverUpload("Utiliser ma propre image")}

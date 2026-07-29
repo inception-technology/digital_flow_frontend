@@ -66,8 +66,8 @@ export type Publication = {
   style: string;
   audio_duration_s: number;
   status: string;
+  /** Nombre de générations d'image (indicatif — plus de plafond). */
   image_generations: number;
-  remaining_generations: number;
   covers: CoverFormat[];
   /**
    * Image source paysage générée, à valider avant l'habillage. Présente dès la
