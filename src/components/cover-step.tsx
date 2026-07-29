@@ -617,7 +617,7 @@ export function CoverStep({ publicationId }: { publicationId: string }) {
   // Étape courante du parcours réel à quatre attentes (audit reco #6) : la même
   // barre nommée, ici pilotée par l'état de la publication.
   const currentStep = hasVideos && !isRendering ? 4 : isRendering ? 3 : 2;
-  const STEPS = ["Audio", "Image", "Vidéo", "Publication"];
+  const STEPS = ["Audio", "Image", "Vidéo", "Post"];
 
   async function handlePublish() {
     if (!publication) return;

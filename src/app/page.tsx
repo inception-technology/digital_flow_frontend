@@ -278,6 +278,18 @@ export default function HomePage() {
   const resumable = publications.filter((p) => RESUMABLE.has(p.status));
   const done = publications.filter((p) => !RESUMABLE.has(p.status));
 
+  // Vue d'ensemble : compteurs par état, sur l'ensemble (actifs + archivés).
+  const all = [...publications, ...archived];
+  const overview = [
+    { n: all.filter((p) => RESUMABLE.has(p.status)).length, label: "En cours" },
+    { n: all.filter((p) => p.status === "published").length, label: "Publiées" },
+    { n: all.filter((p) => p.status === "scheduled").length, label: "Programmées" },
+    {
+      n: all.filter((p) => p.status === "cancelled" || p.status === "error").length,
+      label: "Annulées",
+    },
+  ];
+
   // Sous-titre : nom d'artiste + résumé des plateformes. Le profil descend en
   // sous-titre ; l'action et la liste prennent le haut de l'écran (R1).
   const platformSummary = PLATFORMS.filter((p) => !p.comingSoon)
@@ -296,6 +308,21 @@ export default function HomePage() {
           {(profile.artist_name ?? profile.display_name) + " · " + platformSummary}
         </p>
       </header>
+
+      {/* Vue d'ensemble : compteurs par état. */}
+      <div className="mb-6 grid grid-cols-4 gap-2">
+        {overview.map((stat) => (
+          <div
+            key={stat.label}
+            className="rounded-lg border border-current/10 px-1 py-2 text-center"
+          >
+            <div className="text-xl font-semibold tabular-nums">{stat.n}</div>
+            <div className="mt-0.5 text-[10px] uppercase leading-tight tracking-wide opacity-60">
+              {stat.label}
+            </div>
+          </div>
+        ))}
+      </div>
 
       {/* Action principale en tête (R1). */}
       <Link
