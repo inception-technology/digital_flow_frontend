@@ -295,6 +295,10 @@ export function CoverStep({ publicationId }: { publicationId: string }) {
   // référence. Replié par défaut pour ne pas rouvrir le formulaire de génération
   // sous les résultats (audit reco #11).
   const [adjusting, setAdjusting] = useState(false);
+  // Chemin choisi à l'étape image (écran vierge) : générer ou importer. Tant
+  // qu'aucun n'est choisi, seuls les deux boutons s'affichent ; le clic ne
+  // révèle que les contrôles du chemin retenu.
+  const [imageMode, setImageMode] = useState<"create" | "import" | null>(null);
   // Format de pochette en attente de confirmation de suppression : la
   // suppression est destructrice et sort de la ligne d'actions (audit reco #4).
   const [pendingCoverDelete, setPendingCoverDelete] = useState<string | null>(
@@ -1038,29 +1042,82 @@ export function CoverStep({ publicationId }: { publicationId: string }) {
             qu’elle ne soit déclinée et habillée dans les trois formats.
           </p>
 
-          {/* Deux chemins à parité stricte : même boîte, même rang (audit #1). */}
+          {/* Deux chemins à parité qui basculent le contenu : seuls les
+              contrôles du chemin choisi restent affichés (audit #1). */}
           <div className="grid grid-cols-2 gap-3">
             <div className="flex flex-col gap-2">
               <button
                 type="button"
-                onClick={generateImage}
-                disabled={busy !== null}
-                className="btn btn-primary min-h-[92px] flex-col"
+                onClick={() => setImageMode("create")}
+                aria-pressed={imageMode === "create"}
+                className={`btn min-h-[80px] flex-col ${
+                  imageMode === "create" ? "btn-primary" : "btn-secondary"
+                }`}
               >
-                <IconSparkle size={22} />
-                {busy === "generation" ? "Création…" : "Créer l’image"}
+                <IconSparkle
+                  size={22}
+                  className={
+                    imageMode === "create"
+                      ? undefined
+                      : "text-[color:var(--accent-ink)]"
+                  }
+                />
+                Créer l’image
               </button>
               <p className="text-xs leading-snug opacity-60">
                 L’IA compose d’après votre titre et votre style. Environ 30 s.
               </p>
             </div>
             <div className="flex flex-col gap-2">
-              {importButton("Importer mon image", "min-h-[92px] flex-col")}
-              {coverConstraint}
+              <button
+                type="button"
+                onClick={() => setImageMode("import")}
+                aria-pressed={imageMode === "import"}
+                className={`btn min-h-[80px] flex-col ${
+                  imageMode === "import" ? "btn-primary" : "btn-secondary"
+                }`}
+              >
+                <IconUpload
+                  size={22}
+                  className={
+                    imageMode === "import"
+                      ? undefined
+                      : "text-[color:var(--accent-ink)]"
+                  }
+                />
+                Importer mon image
+              </button>
+              <p className="text-xs leading-snug opacity-60">
+                png, jpg ou webp · au moins 1080×1080 px.
+              </p>
             </div>
           </div>
 
-          {adjustPanel}
+          {/* Chemin « générer » : uniquement les réglages de génération. */}
+          {imageMode === "create" && (
+            <div className="flex flex-col gap-4 border-t border-current/10 pt-4">
+              {referenceField}
+              {promptField}
+              {promptSources}
+              <button
+                type="button"
+                onClick={generateImage}
+                disabled={busy !== null}
+                className="btn btn-primary btn-block"
+              >
+                <IconSparkle size={18} />
+                {busy === "generation" ? "Création…" : "Lancer la génération"}
+              </button>
+            </div>
+          )}
+
+          {/* Chemin « importer » : uniquement le choix de fichier. */}
+          {imageMode === "import" && (
+            <div className="flex flex-col gap-3 border-t border-current/10 pt-4">
+              {coverConstraint}
+              {importButton("Choisir un fichier", "btn-block min-h-[52px]")}
+            </div>
+          )}
         </div>
       )}
 
