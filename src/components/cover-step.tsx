@@ -55,6 +55,26 @@ const VIDEO_ORDER = ["landscape", "vertical"];
 const ACTION =
   "rounded-lg border border-current/20 px-4 py-3 text-sm font-medium disabled:cursor-not-allowed disabled:opacity-40";
 
+// Bouton d'import : teinté (indigo) pour se distinguer du bouton neutre de
+// génération, en clair comme en sombre.
+const IMPORT_ACTION =
+  "rounded-lg border border-indigo-500/40 bg-indigo-500/10 px-4 py-3 text-center text-sm font-medium text-indigo-700 disabled:cursor-not-allowed disabled:opacity-40 dark:text-indigo-300";
+
+// Lit un fichier en base64 (sans le préfixe `data:...;base64,`), pour l'envoyer
+// comme image de référence dans le corps JSON de la génération.
+function fileToBase64(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = reader.result as string;
+      const comma = result.indexOf(",");
+      resolve(comma >= 0 ? result.slice(comma + 1) : result);
+    };
+    reader.onerror = () => reject(new Error("lecture impossible"));
+    reader.readAsDataURL(file);
+  });
+}
+
 function formatElapsed(seconds: number): string {
   const minutes = Math.floor(seconds / 60);
   return `${minutes}:${String(seconds % 60).padStart(2, "0")}`;
@@ -172,6 +192,11 @@ export function CoverStep({ publicationId }: { publicationId: string }) {
   // Logo « split » incrusté sur les trois pochettes. Coché par défaut ; se
   // bascule sans regénérer l'image (l'habillage ne refacture rien).
   const [addLogo, setAddLogo] = useState(true);
+  // Retour visuel bref après avoir copié le prompt de génération.
+  const [promptCopied, setPromptCopied] = useState(false);
+  // Image de référence optionnelle (image-to-image), gardée en base64 pour la
+  // prochaine génération. Persiste tant que le créateur ne la retire pas.
+  const [reference, setReference] = useState<{ name: string; b64: string } | null>(null);
   // Correction des infos du morceau (titre / artiste / style) en cas de faute
   // de saisie. `editing` ouvre le formulaire inline ; les brouillons ci-dessous
   // sont initialisés à l'ouverture.
@@ -319,6 +344,31 @@ export function CoverStep({ publicationId }: { publicationId: string }) {
       );
     } finally {
       setBusy(null);
+    }
+  }
+
+  async function pickReference(file: File) {
+    setError(null);
+    // Garde-fou de taille : la référence est de toute façon réduite côté serveur.
+    if (file.size > 15 * 1024 * 1024) {
+      setError("Image de référence trop lourde — 15 Mo maximum.");
+      return;
+    }
+    try {
+      setReference({ name: file.name, b64: await fileToBase64(file) });
+    } catch {
+      setError("Image de référence illisible — utilisez un png, un jpg ou un webp.");
+    }
+  }
+
+  async function copyPrompt() {
+    if (!publication?.image_prompt) return;
+    try {
+      await navigator.clipboard.writeText(publication.image_prompt);
+      setPromptCopied(true);
+      setTimeout(() => setPromptCopied(false), 1500);
+    } catch {
+      setError("Copie impossible — copiez le texte à la main.");
     }
   }
 
@@ -545,6 +595,46 @@ export function CoverStep({ publicationId }: { publicationId: string }) {
     </fieldset>
   );
 
+  // Image de référence (image-to-image) : guide la génération sans apparaître
+  // telle quelle. Réutilisée aux différents points de génération.
+  const referenceField = (
+    <div className="flex flex-col gap-1 text-sm">
+      <span className="font-medium">Image de référence (optionnel)</span>
+      {reference ? (
+        <div className="flex items-center justify-between gap-2 rounded-lg border border-current/20 px-3 py-2">
+          <span className="min-w-0 truncate text-xs opacity-70">{reference.name}</span>
+          <button
+            type="button"
+            onClick={() => setReference(null)}
+            disabled={busy !== null}
+            className="shrink-0 text-xs font-medium text-red-700 disabled:opacity-40 dark:text-red-400"
+          >
+            Retirer
+          </button>
+        </div>
+      ) : (
+        <label className={`${ACTION} cursor-pointer text-center`}>
+          Choisir une image de référence
+          <input
+            type="file"
+            accept="image/png,image/jpeg,image/webp"
+            className="hidden"
+            disabled={busy !== null}
+            onChange={(event) => {
+              const file = event.target.files?.[0];
+              event.target.value = "";
+              if (file) pickReference(file);
+            }}
+          />
+        </label>
+      )}
+      <span className="text-xs opacity-60">
+        Guide la génération (composition, palette). L’image n’apparaît pas telle
+        quelle.
+      </span>
+    </div>
+  );
+
   // Case du logo, réutilisée à la validation et lors d'un ré-habillage : cocher
   // ou décocher n'appelle que l'habillage (Pillow), jamais le modèle.
   const logoToggle = (
@@ -566,7 +656,7 @@ export function CoverStep({ publicationId }: { publicationId: string }) {
   // format accompagne toujours le bouton — y compris après une génération.
   const coverUpload = (label: string) => (
     <div className="flex flex-col gap-1">
-      <label className={`${ACTION} cursor-pointer text-center`}>
+      <label className={`${IMPORT_ACTION} cursor-pointer`}>
         {busy === "upload" ? "Envoi…" : label}
         <input
           type="file"
@@ -599,6 +689,45 @@ export function CoverStep({ publicationId }: { publicationId: string }) {
       </p>
     </div>
   );
+
+  // Prompt ayant produit l'image, avec un bouton pour le copier (réutilisable
+  // comme point de départ d'un autre prompt). Nul si l'image vient d'un import.
+  const promptBox = publication.image_prompt ? (
+    <div className="rounded-lg border border-current/15 bg-current/5 p-3">
+      <div className="flex items-center justify-between gap-2">
+        <p className="text-xs font-medium opacity-60">Prompt de génération</p>
+        <button
+          type="button"
+          onClick={copyPrompt}
+          aria-label="Copier le prompt de génération"
+          className="flex shrink-0 items-center gap-1 text-xs font-medium opacity-70 hover:opacity-100"
+        >
+          {promptCopied ? (
+            "Copié ✓"
+          ) : (
+            <>
+              <svg
+                width="14"
+                height="14"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                aria-hidden="true"
+              >
+                <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+                <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+              </svg>
+              Copier
+            </>
+          )}
+        </button>
+      </div>
+      <p className="mt-1 whitespace-pre-wrap text-sm">{publication.image_prompt}</p>
+    </div>
+  ) : null;
 
   return (
     <main className="mx-auto w-full max-w-md flex-1 p-6">
@@ -705,11 +834,17 @@ export function CoverStep({ publicationId }: { publicationId: string }) {
 
           {promptField}
           {promptSources}
+          {referenceField}
           <button
             type="button"
             onClick={() =>
               run("generation", () =>
-                generateCover(publication.id, { prompt, useTitle, useStyle }),
+                generateCover(publication.id, {
+                  prompt,
+                  useTitle,
+                  useStyle,
+                  referenceB64: reference?.b64,
+                }),
               )
             }
             disabled={busy !== null}
@@ -750,14 +885,7 @@ export function CoverStep({ publicationId }: { publicationId: string }) {
             Télécharger l’image source
           </a>
 
-          {publication.image_prompt && (
-            <div className="rounded-lg border border-current/15 bg-current/5 p-3">
-              <p className="text-xs font-medium opacity-60">Prompt de génération</p>
-              <p className="mt-1 whitespace-pre-wrap text-sm">
-                {publication.image_prompt}
-              </p>
-            </div>
-          )}
+          {promptBox}
 
           {logoToggle}
 
@@ -780,11 +908,17 @@ export function CoverStep({ publicationId }: { publicationId: string }) {
 
           {!noGenerationsLeft && promptField}
           {!noGenerationsLeft && promptSources}
+          {!noGenerationsLeft && referenceField}
           <button
             type="button"
             onClick={() =>
               run("generation", () =>
-                generateCover(publication.id, { prompt, useTitle, useStyle }),
+                generateCover(publication.id, {
+                  prompt,
+                  useTitle,
+                  useStyle,
+                  referenceB64: reference?.b64,
+                }),
               )
             }
             disabled={busy !== null || noGenerationsLeft}
@@ -801,13 +935,7 @@ export function CoverStep({ publicationId }: { publicationId: string }) {
       )}
 
       {hasCovers && publication.image_prompt && (
-        // Prompt ayant produit les pochettes (absent si image importée).
-        <div className="mb-4 rounded-lg border border-current/15 bg-current/5 p-3">
-          <p className="text-xs font-medium opacity-60">Prompt de génération</p>
-          <p className="mt-1 whitespace-pre-wrap text-sm">
-            {publication.image_prompt}
-          </p>
-        </div>
+        <div className="mb-4">{promptBox}</div>
       )}
 
       {hasCovers && (
@@ -1452,11 +1580,17 @@ export function CoverStep({ publicationId }: { publicationId: string }) {
 
               {!noGenerationsLeft && promptField}
               {!noGenerationsLeft && promptSources}
+              {!noGenerationsLeft && referenceField}
               <button
                 type="button"
                 onClick={() =>
                   run("generation", () =>
-                generateCover(publication.id, { prompt, useTitle, useStyle }),
+                generateCover(publication.id, {
+                  prompt,
+                  useTitle,
+                  useStyle,
+                  referenceB64: reference?.b64,
+                }),
               )
                 }
                 disabled={busy !== null || noGenerationsLeft}

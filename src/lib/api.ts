@@ -184,7 +184,13 @@ export function fetchPublications(
  */
 export function generateCover(
   id: string,
-  options: { prompt?: string; useTitle?: boolean; useStyle?: boolean } = {},
+  options: {
+    prompt?: string;
+    useTitle?: boolean;
+    useStyle?: boolean;
+    /** Image de référence (base64 du fichier brut) pour un rendu image-to-image. */
+    referenceB64?: string | null;
+  } = {},
 ): Promise<Publication> {
   const trimmed = options.prompt?.trim();
   return request(`/api/publications/${id}/image`, {
@@ -193,6 +199,7 @@ export function generateCover(
       prompt: trimmed || null,
       use_title: options.useTitle ?? true,
       use_style: options.useStyle ?? true,
+      reference_b64: options.referenceB64 || null,
     }),
   });
 }
