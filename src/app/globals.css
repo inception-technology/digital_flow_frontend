@@ -3,11 +3,31 @@
 :root {
   --background: #ffffff;
   --foreground: #171717;
+
+  /* Accent teal — brand mark, used for icons, links, focus rings and
+     progress. `accent-btn` is a darkened step so white text on a filled
+     primary button clears WCAG 1.4.3 (~5.6:1) ; `accent-ink` is the darkest
+     step, for accent-colored text on the page background (links, ghost
+     buttons). `accent-soft` is the tinted panel fill. */
+  --accent: #0088b0;
+  --accent-ink: #006786;
+  --accent-btn: #006786;
+  --accent-btn-hover: #00516a;
+  --accent-soft: #e9f8ff;
+
+  /* Danger — a single destructive register. Never adjacent to a frequent
+     action, always confirmed. */
+  --danger: #b3204a;
+  --danger-ink: #a01a42;
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
+  --color-accent: var(--accent);
+  --color-accent-ink: var(--accent-ink);
+  --color-accent-soft: var(--accent-soft);
+  --color-danger: var(--danger);
   --font-sans: var(--font-geist-sans);
 }
 
@@ -15,6 +35,15 @@
   :root {
     --background: #0a0a0a;
     --foreground: #ededed;
+
+    --accent: #38a6cf;
+    --accent-ink: #5cc4e8;
+    --accent-btn: #0e88ad;
+    --accent-btn-hover: #1a9ac2;
+    --accent-soft: color-mix(in srgb, #0088b0 20%, #0a0a0a);
+
+    --danger: #ff6f91;
+    --danger-ink: #ff8aa5;
   }
 }
 
@@ -30,4 +59,92 @@ input,
 select,
 textarea {
   font-size: max(16px, 1rem);
+}
+
+/* — Boutons : trois rôles, une seule définition (audit reco #16) —
+   Toute cible tapable fait au moins 44 px (audit — accessibilité tactile).
+   Le focus clavier est toujours visible (anneau de 2 px). */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  min-height: 44px;
+  padding: 0.625rem 1rem;
+  border: 1px solid transparent;
+  border-radius: 0.625rem;
+  font: inherit;
+  font-weight: 500;
+  font-size: 0.9375rem;
+  line-height: 1.2;
+  text-align: center;
+  text-decoration: none;
+  cursor: pointer;
+  transition:
+    background-color 0.15s ease,
+    border-color 0.15s ease,
+    opacity 0.15s ease;
+}
+.btn svg {
+  display: block;
+  flex: none;
+}
+.btn:disabled,
+.btn[aria-disabled="true"] {
+  cursor: not-allowed;
+  opacity: 0.4;
+}
+.btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* Primaire — une seule par écran, toujours au même endroit. */
+.btn-primary {
+  background: var(--accent-btn);
+  color: #ffffff;
+  border-color: var(--accent-btn);
+}
+.btn-primary:not(:disabled):hover {
+  background: var(--accent-btn-hover);
+  border-color: var(--accent-btn-hover);
+}
+
+/* Secondaire — contour neutre, même boîte que le primaire. */
+.btn-secondary {
+  background: transparent;
+  color: var(--foreground);
+  border-color: color-mix(in srgb, currentColor 22%, transparent);
+}
+.btn-secondary:not(:disabled):hover {
+  background: color-mix(in srgb, currentColor 6%, transparent);
+}
+
+/* Fantôme — action tertiaire, texte accent, sans boîte. */
+.btn-ghost {
+  background: transparent;
+  color: var(--accent-ink);
+  padding-inline: 0.5rem;
+}
+.btn-ghost:not(:disabled):hover {
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+}
+
+/* Danger — jamais accolé à une action fréquente, toujours confirmé. */
+.btn-danger {
+  background: color-mix(in srgb, var(--danger) 8%, transparent);
+  color: var(--danger-ink);
+  border-color: color-mix(in srgb, var(--danger) 40%, transparent);
+}
+.btn-danger:not(:disabled):hover {
+  background: color-mix(in srgb, var(--danger) 16%, transparent);
+}
+
+.btn-block {
+  width: 100%;
+}
+.btn-icon {
+  padding: 0;
+  width: 44px;
+  height: 44px;
 }

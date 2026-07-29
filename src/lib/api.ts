@@ -88,12 +88,15 @@ export type Privacy = "private" | "unlisted" | "public";
 /** Visibilité d'un morceau SoundCloud (l'API n'a pas de « non répertorié »). */
 export type Sharing = "private" | "public";
 
-/** Ligne de la liste des publications — sans média, donc sans URL signée. */
+/** Ligne de la liste des publications : de quoi afficher une entrée cliquable,
+ * avec une vignette carrée (pochette 1:1 signée) — nulle tant qu'aucune
+ * pochette n'existe. */
 export type PublicationSummary = {
   id: string;
   title: string;
   status: string;
   created_at: string;
+  thumbnail_url: string | null;
 };
 
 export const loginUrl = `${API_URL}/api/auth/google/login`;
