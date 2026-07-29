@@ -4,11 +4,34 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 
 /**
+ * Icône de navigation. Le SVG (servi depuis `public/`) sert de **masque** et la
+ * couleur vient du texte courant (`bg-current`) : l'icône suit donc le thème
+ * clair/sombre, ce qu'un `<img>` d'un SVG à fill noir ne ferait pas.
+ */
+function NavIcon({ src }: { src: string }) {
+  return (
+    <span
+      aria-hidden
+      className="block h-5 w-5 bg-current"
+      style={{
+        maskImage: `url(${src})`,
+        WebkitMaskImage: `url(${src})`,
+        maskSize: "contain",
+        WebkitMaskSize: "contain",
+        maskRepeat: "no-repeat",
+        WebkitMaskRepeat: "no-repeat",
+        maskPosition: "center",
+        WebkitMaskPosition: "center",
+      }}
+    />
+  );
+}
+
+/**
  * Barre de navigation globale (dans le layout racine).
  *
- * La marque ramène toujours à l'accueil ; le bouton « Accueil » explicite
- * n'apparaît que sur les pages internes, pour ne pas doublonner sur l'accueil
- * lui-même.
+ * La marque ramène toujours à l'accueil ; l'icône « Accueil » n'apparaît que sur
+ * les pages internes, pour ne pas doublonner sur l'accueil lui-même.
  */
 export function NavBar() {
   const pathname = usePathname();
@@ -24,18 +47,20 @@ export function NavBar() {
           {!onHome && (
             <Link
               href="/"
-              className="rounded-lg border border-current/20 px-3 py-1.5 text-sm font-medium"
+              aria-label="Accueil"
+              title="Accueil"
+              className="btn btn-secondary btn-icon"
             >
-              ← Accueil
+              <NavIcon src="/home.svg" />
             </Link>
           )}
           <Link
             href="/parametres"
             aria-label="Paramètres"
             title="Paramètres"
-            className="rounded-lg border border-current/20 px-3 py-1.5 text-sm"
+            className="btn btn-secondary btn-icon"
           >
-            <span aria-hidden>⚙️</span>
+            <NavIcon src="/param.svg" />
           </Link>
         </div>
       </nav>
