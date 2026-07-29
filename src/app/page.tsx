@@ -11,7 +11,6 @@ import {
   type PublicationSummary,
 } from "@/lib/api";
 import { PlatformList } from "@/components/platform-list";
-import { PLATFORMS } from "@/lib/constants";
 
 // Statut d'une publication : un libellé explicite porte l'information, la
 // couleur ne fait que la redoubler (audit reco #7 — plus de statut porté par la
@@ -51,6 +50,16 @@ function formatDateTime(iso: string): string {
     dateStyle: "short",
     timeStyle: "short",
   });
+}
+
+/** Initiales de repli quand le compte Google n'a pas d'avatar. */
+function initials(name: string): string {
+  return name
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase() ?? "")
+    .join("");
 }
 
 /** Vignette carrée de pochette, ou un repère neutre tant qu'aucune n'existe. */
@@ -290,24 +299,38 @@ export default function HomePage() {
     },
   ];
 
-  // Sous-titre : nom d'artiste + résumé des plateformes. Le profil descend en
-  // sous-titre ; l'action et la liste prennent le haut de l'écran (R1).
-  const platformSummary = PLATFORMS.filter((p) => !p.comingSoon)
-    .map((p) =>
-      profile.connected_platforms.includes(p.key)
-        ? `${p.label} connecté`
-        : `${p.label} à connecter`,
-    )
-    .join(" · ");
-
   return (
     <main className="mx-auto w-full max-w-md flex-1 p-6">
       <header className="mb-5">
         <h1 className="text-3xl font-semibold">Vos publications</h1>
-        <p className="mt-1 text-sm opacity-70">
-          {(profile.artist_name ?? profile.display_name) + " · " + platformSummary}
-        </p>
       </header>
+
+      {/* Compte Google connecté : avatar (ou initiales), nom, e-mail. */}
+      <section className="mb-6 flex items-center gap-4 rounded-lg border border-current/15 p-4">
+        {profile.avatar_url ? (
+          // Avatar Google distant, déjà dimensionné : le pipeline
+          // d'optimisation de Next n'apporterait rien.
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={profile.avatar_url}
+            alt=""
+            className="h-14 w-14 shrink-0 rounded-full object-cover"
+          />
+        ) : (
+          <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-current/10 text-lg font-semibold">
+            {initials(profile.display_name)}
+          </div>
+        )}
+        <div className="min-w-0">
+          <p className="truncate font-semibold">
+            {profile.artist_name ?? profile.display_name}
+          </p>
+          {profile.artist_name && (
+            <p className="truncate text-sm opacity-70">{profile.display_name}</p>
+          )}
+          <p className="truncate text-sm opacity-60">{profile.email}</p>
+        </div>
+      </section>
 
       {/* Vue d'ensemble : compteurs par état. */}
       <div className="mb-6 grid grid-cols-4 gap-2">
