@@ -53,19 +53,59 @@ function formatDateTime(iso: string): string {
   });
 }
 
-/** Une ligne cliquable ≥ 44 px : titre, statut écrit, date. */
+/** Vignette carrée de pochette, ou un repère neutre tant qu'aucune n'existe. */
+function Thumbnail({ url }: { url: string | null }) {
+  if (url) {
+    return (
+      // Vignette distante signée (courte durée) : le pipeline d'optimisation de
+      // Next n'apporterait rien pour une image déjà dimensionnée.
+      // eslint-disable-next-line @next/next/no-img-element
+      <img
+        src={url}
+        alt=""
+        className="h-12 w-12 shrink-0 rounded object-cover"
+      />
+    );
+  }
+  return (
+    <div
+      aria-hidden
+      className="flex h-12 w-12 shrink-0 items-center justify-center rounded bg-current/10 text-current/40"
+    >
+      <svg
+        width="20"
+        height="20"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.6"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      >
+        <path d="M9 18V5l12-2v13" />
+        <circle cx="6" cy="18" r="3" />
+        <circle cx="18" cy="16" r="3" />
+      </svg>
+    </div>
+  );
+}
+
+/** Une ligne cliquable ≥ 44 px : vignette, titre, statut écrit, date. */
 function PublicationRow({ publication }: { publication: PublicationSummary }) {
   return (
     <li className="border-b border-current/10">
       <Link
         href={`/publications/${publication.id}`}
-        className="flex min-h-[56px] flex-col justify-center gap-1 py-2"
+        className="flex min-h-[64px] items-center gap-3 py-2"
       >
-        <span className="truncate font-medium">{publication.title}</span>
-        <span className="flex items-center gap-2">
-          <StatusChip status={publication.status} />
-          <span className="text-xs tabular-nums opacity-60">
-            {formatDateTime(publication.created_at)}
+        <Thumbnail url={publication.thumbnail_url} />
+        <span className="flex min-w-0 flex-1 flex-col gap-1">
+          <span className="truncate font-medium">{publication.title}</span>
+          <span className="flex items-center gap-2">
+            <StatusChip status={publication.status} />
+            <span className="text-xs tabular-nums opacity-60">
+              {formatDateTime(publication.created_at)}
+            </span>
           </span>
         </span>
       </Link>
