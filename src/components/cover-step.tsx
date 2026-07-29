@@ -14,6 +14,7 @@ import {
   fetchProfile,
   fetchPublication,
   fetchRenderStatus,
+  fetchStyles,
   fetchYoutubePlaylists,
   generateCover,
   generateCovers,
@@ -204,6 +205,8 @@ export function CoverStep({ publicationId }: { publicationId: string }) {
   const [editTitle, setEditTitle] = useState("");
   const [editArtist, setEditArtist] = useState("");
   const [editStyle, setEditStyle] = useState("");
+  // Styles proposés à l'édition : intégrés + personnalisés du créateur.
+  const [styleOptions, setStyleOptions] = useState<string[]>([...MUSIC_STYLES]);
   const [privacy, setPrivacy] = useState<Privacy>("private");
   const [sharing, setSharing] = useState<Sharing>("private");
   // Récap de publication (JALON 3) : plateformes reliées au compte, cibles
@@ -240,6 +243,12 @@ export function CoverStep({ publicationId }: { publicationId: string }) {
     window.addEventListener("keydown", close);
     return () => window.removeEventListener("keydown", close);
   }, [enlarged]);
+
+  useEffect(() => {
+    fetchStyles()
+      .then((styles) => setStyleOptions([...styles.builtin, ...styles.custom.map((s) => s.name)]))
+      .catch(() => {});
+  }, []);
 
   useEffect(() => {
     fetchPublication(publicationId)
@@ -763,7 +772,10 @@ export function CoverStep({ publicationId }: { publicationId: string }) {
                 disabled={busy !== null}
                 className="rounded-lg border border-current/20 bg-transparent px-3 py-2 disabled:opacity-40"
               >
-                {MUSIC_STYLES.map((name) => (
+                {(styleOptions.includes(editStyle)
+                  ? styleOptions
+                  : [editStyle, ...styleOptions]
+                ).map((name) => (
                   <option key={name} value={name}>
                     {name}
                   </option>

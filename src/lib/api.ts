@@ -357,6 +357,32 @@ export function archivePublication(id: string): Promise<Publication> {
   return request(`/api/publications/${id}/archive`, { method: "POST" });
 }
 
+/** Un style personnalisé : son nom (clé) et son ambiance (guide l'image). */
+export type CustomStyleInfo = { name: string; mood: string };
+
+/** Styles disponibles : intégrés (noms) + personnalisés (nom + ambiance). */
+export type StylesInfo = { builtin: string[]; custom: CustomStyleInfo[] };
+
+export function fetchStyles(): Promise<StylesInfo> {
+  return request(`/api/styles`);
+}
+
+export function createStyle(name: string, mood: string): Promise<CustomStyleInfo> {
+  return request(`/api/styles`, {
+    method: "POST",
+    body: JSON.stringify({ name, mood }),
+  });
+}
+
+/** Supprime un style personnalisé (n'affecte pas les publications existantes). */
+export async function deleteStyle(name: string): Promise<void> {
+  const response = await fetch(`${API_URL}/api/styles/${encodeURIComponent(name)}`, {
+    method: "DELETE",
+    credentials: "include",
+  });
+  if (!response.ok) throw new ApiError(await readDetail(response));
+}
+
 export async function uploadCover(id: string, file: File): Promise<Publication> {
   const body = new FormData();
   body.append("file", file);

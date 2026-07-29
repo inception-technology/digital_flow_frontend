@@ -7,6 +7,7 @@ import {
   ApiError,
   createPublication,
   fetchProfile,
+  fetchStyles,
   uploadAudio,
   type Profile,
 } from "@/lib/api";
@@ -16,7 +17,7 @@ import {
   formatBytes,
   formatDuration,
 } from "@/lib/audio";
-import { ACCEPT_ATTRIBUTE, MUSIC_STYLES, type MusicStyle } from "@/lib/constants";
+import { ACCEPT_ATTRIBUTE, MUSIC_STYLES } from "@/lib/constants";
 
 type Selection = {
   file: File;
@@ -38,7 +39,10 @@ export default function NewPublicationPage() {
 
   const [title, setTitle] = useState("");
   const [artistName, setArtistName] = useState("");
-  const [style, setStyle] = useState<MusicStyle>("RAP");
+  const [style, setStyle] = useState<string>("RAP");
+  // Styles proposés : intégrés + personnalisés du créateur. Repli sur les
+  // intégrés le temps du chargement (ou si l'appel échoue).
+  const [styleOptions, setStyleOptions] = useState<string[]>([...MUSIC_STYLES]);
 
   const [uploading, setUploading] = useState(false);
   const [progress, setProgress] = useState(0);
@@ -55,6 +59,12 @@ export default function NewPublicationPage() {
       })
       .catch(() => setProfile(null))
       .finally(() => setLoadingProfile(false));
+  }, []);
+
+  useEffect(() => {
+    fetchStyles()
+      .then((styles) => setStyleOptions([...styles.builtin, ...styles.custom.map((s) => s.name)]))
+      .catch(() => {});
   }, []);
 
   // La connexion vit sur l'accueil : un visiteur non connecté qui arrive
@@ -287,17 +297,18 @@ export default function NewPublicationPage() {
           <select
             id="style"
             value={style}
-            onChange={(event) => setStyle(event.target.value as MusicStyle)}
+            onChange={(event) => setStyle(event.target.value)}
             className={FIELD}
           >
-            {MUSIC_STYLES.map((name) => (
+            {styleOptions.map((name) => (
               <option key={name} value={name}>
                 {name}
               </option>
             ))}
           </select>
           <p className="text-xs opacity-60">
-            Détermine l’ambiance visuelle de la vidéo — rien à régler ensuite.
+            Détermine l’ambiance visuelle — créez vos propres styles dans les
+            Paramètres.
           </p>
         </fieldset>
 
