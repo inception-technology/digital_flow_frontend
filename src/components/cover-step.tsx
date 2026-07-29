@@ -299,6 +299,15 @@ export function CoverStep({ publicationId }: { publicationId: string }) {
   // qu'aucun n'est choisi, seuls les deux boutons s'affichent ; le clic ne
   // révèle que les contrôles du chemin retenu.
   const [imageMode, setImageMode] = useState<"create" | "import" | null>(null);
+  // Une source (générée ou importée) écartée par l'utilisateur qui repart de
+  // zéro : on réaffiche le choix Créer/Importer au lieu de la validation. La
+  // source réelle est remplacée à la prochaine génération/import (cf. handlers).
+  const [sourceDiscarded, setSourceDiscarded] = useState(false);
+  // Bascule de chemin demandée depuis l'écran de validation (après ≥ 1 source) :
+  // déclenche la confirmation « tout sera perdu » avant de repartir de zéro.
+  const [pendingSwitch, setPendingSwitch] = useState<"create" | "import" | null>(
+    null,
+  );
   // Format de pochette en attente de confirmation de suppression : la
   // suppression est destructrice et sort de la ligne d'actions (audit reco #4).
   const [pendingCoverDelete, setPendingCoverDelete] = useState<string | null>(
@@ -455,16 +464,31 @@ export function CoverStep({ publicationId }: { publicationId: string }) {
 
   // Lance (ou relance) la génération de l'image source avec le prompt, les
   // sources et la référence courants. Le seul point qui consomme une génération.
-  function generateImage() {
+  // Génère (ou régénère) l'image source. Réinitialise `sourceDiscarded` **au
+  // succès** — la nouvelle source devient la source courante et doit s'afficher.
+  async function generateImage() {
     if (!publication) return;
-    run("generation", () =>
-      generateCover(publication.id, {
-        prompt,
-        useTitle,
-        useStyle,
-        referenceB64: reference?.b64,
-      }),
-    );
+    setBusy("generation");
+    setError(null);
+    try {
+      setPublication(
+        await generateCover(publication.id, {
+          prompt,
+          useTitle,
+          useStyle,
+          referenceB64: reference?.b64,
+        }),
+      );
+      setSourceDiscarded(false);
+    } catch (caught) {
+      setError(
+        caught instanceof ApiError
+          ? caught.message
+          : "L’opération a échoué — réessayez.",
+      );
+    } finally {
+      setBusy(null);
+    }
   }
 
   // Validation d'un fichier de pochette importé (format + dimension) avant
@@ -484,7 +508,31 @@ export function CoverStep({ publicationId }: { publicationId: string }) {
       setError(check.message);
       return;
     }
-    run("upload", () => uploadCover(publication.id, file));
+    setBusy("upload");
+    try {
+      setPublication(await uploadCover(publication.id, file));
+      // L'image importée devient la source courante (cf. generateImage).
+      setSourceDiscarded(false);
+    } catch (caught) {
+      setError(
+        caught instanceof ApiError
+          ? caught.message
+          : "L’envoi a échoué — réessayez.",
+      );
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  // Confirme la bascule de chemin (générer ↔ importer) : on écarte la source
+  // courante et on revient au choix initial, dans le mode demandé. La source
+  // réelle sera remplacée au prochain « Lancer » / « Choisir un fichier ».
+  function confirmSwitch() {
+    if (!pendingSwitch) return;
+    setSourceDiscarded(true);
+    setImageMode(pendingSwitch);
+    setAdjusting(false);
+    setPendingSwitch(null);
   }
 
   async function copyPrompt() {
@@ -581,6 +629,12 @@ export function CoverStep({ publicationId }: { publicationId: string }) {
   // Image source paysage générée, en attente d'habillage. Présente dès la
   // génération ; c'est l'étape où le créateur valide avant « Générer pochettes ».
   const hasSource = !!publication.image_source;
+  // La source vient d'une génération (prompt présent) ou d'un import (prompt nul).
+  const sourceFromGeneration = hasSource && !!publication.image_prompt;
+  // Écran de validation de la source vs choix initial Créer/Importer. Une source
+  // « écartée » (bascule de chemin confirmée) renvoie au choix initial.
+  const showSourceStep = !hasCovers && hasSource && !sourceDiscarded;
+  const showChoiceStep = !hasCovers && (!hasSource || sourceDiscarded);
   // Le titre et l'artiste sont incrustés dans les pochettes : on ne les édite
   // que tant que ces pochettes restent régénérables. Une vidéo rendue (ou en
   // cours), ou un projet publié, les fige — le titre n'est alors plus modifiable.
@@ -760,7 +814,12 @@ export function CoverStep({ publicationId }: { publicationId: string }) {
           </button>
         </div>
       ) : (
-        <label className={`${ACTION} cursor-pointer`}>
+        <label
+          aria-disabled={busy !== null}
+          className={`${ACTION} ${
+            busy !== null ? "cursor-not-allowed opacity-40" : "cursor-pointer"
+          }`}
+        >
           Choisir une image de référence
           <input
             type="file"
@@ -1035,7 +1094,7 @@ export function CoverStep({ publicationId }: { publicationId: string }) {
         )}
       </header>
 
-      {!hasCovers && !hasSource && (
+      {showChoiceStep && (
         <div className="mb-6 flex flex-col gap-5">
           <p className="text-sm leading-relaxed opacity-80">
             Deux façons de faire. Dans les deux cas, vous validez l’image avant
@@ -1121,16 +1180,21 @@ export function CoverStep({ publicationId }: { publicationId: string }) {
         </div>
       )}
 
-      {!hasCovers && hasSource && (
-        // Un seul état à l'écran : l'image à valider, puis les décisions —
-        // valider et habiller, ou refaire. Le formulaire de génération est
-        // replié dans « Ajuster » (audit reco #11).
+      {showSourceStep && (
+        // Un seul état à l'écran : la source à valider, puis les décisions.
+        // La disposition change selon l'origine de la source (générée / importée).
         <div className="mb-6 flex flex-col gap-4">
           <div className="flex items-baseline justify-between gap-3">
-            <h2 className="text-lg font-semibold">Image prête — à vérifier</h2>
-            <span className="shrink-0 text-xs tabular-nums opacity-60">
-              Essai n° {publication.image_generations}
-            </span>
+            <h2 className="text-lg font-semibold">
+              {sourceFromGeneration
+                ? "Image prête — à vérifier"
+                : "Image importée — à vérifier"}
+            </h2>
+            {sourceFromGeneration && (
+              <span className="shrink-0 text-xs tabular-nums opacity-60">
+                Essai n° {publication.image_generations}
+              </span>
+            )}
           </div>
 
           {/* Aperçu de la source — image distante signée, courte durée. */}
@@ -1140,60 +1204,149 @@ export function CoverStep({ publicationId }: { publicationId: string }) {
             alt="Image à valider, avant habillage"
             className="w-full rounded-lg border border-current/10"
           />
-          <p className="-mt-1 text-xs opacity-60">
-            Elle sera rognée dans les trois formats, avec le titre, le nom
-            d’artiste et (au choix) le logo incrustés.
-          </p>
 
-          {logoToggle}
-
-          {/* Décision primaire, une seule, toujours en tête. */}
-          <button
-            type="button"
-            onClick={() =>
-              run("covers", () => generateCovers(publication.id, { addLogo }))
-            }
-            disabled={busy !== null}
-            className="btn btn-primary btn-block"
+          {/* Télécharger cette image (icône, juste sous l'aperçu). */}
+          <a
+            href={publication.image_source!}
+            download
+            aria-label="Télécharger cette image"
+            title="Télécharger cette image"
+            className="btn btn-secondary btn-icon self-start"
           >
-            <IconCheck size={18} />
-            {busy === "covers"
-              ? "Habillage…"
-              : "Valider et habiller les 3 formats"}
-          </button>
+            <IconDownload size={18} />
+          </a>
 
-          {/* Deux replis à parité : nouvel essai (consomme) / importer. */}
-          <div className="grid grid-cols-2 gap-3">
-            <div className="flex flex-col gap-1">
+          {sourceFromGeneration ? (
+            // Chemin génération : Ajuster · Nouvel essai · logo · Valider · Importer.
+            <>
+              {adjustPanel}
               <button
                 type="button"
                 onClick={generateImage}
                 disabled={busy !== null}
                 className="btn btn-secondary btn-block"
               >
-                <IconRefresh size={17} className="text-[color:var(--accent-ink)]" />
+                <IconRefresh
+                  size={17}
+                  className="text-[color:var(--accent-ink)]"
+                />
                 {busy === "generation" ? "Essai…" : "Nouvel essai"}
               </button>
-              <p className="text-xs leading-snug opacity-60">
-                Consomme une génération.
+              {logoToggle}
+              <button
+                type="button"
+                onClick={() =>
+                  run("covers", () =>
+                    generateCovers(publication.id, { addLogo }),
+                  )
+                }
+                disabled={busy !== null}
+                className="btn btn-primary btn-block"
+              >
+                <IconCheck size={18} />
+                {busy === "covers"
+                  ? "Habillage…"
+                  : "Valider et habiller les 3 formats"}
+              </button>
+              {/* Basculer vers l'import : confirmation « tout sera perdu ». */}
+              <button
+                type="button"
+                onClick={() => setPendingSwitch("import")}
+                disabled={busy !== null}
+                className="btn btn-secondary btn-block"
+              >
+                <IconUpload
+                  size={17}
+                  className="text-[color:var(--accent-ink)]"
+                />
+                Importer une image
+              </button>
+            </>
+          ) : (
+            // Chemin import : contrôles de génération masqués, sauf « Créer ».
+            <>
+              <p className="-mt-1 text-xs opacity-60">
+                Elle sera rognée dans les trois formats, avec le titre, le nom
+                d’artiste et (au choix) le logo incrustés.
               </p>
-            </div>
-            <div className="flex flex-col gap-1">
-              {importButton("Importer", "btn-block")}
-              {coverConstraint}
+              {logoToggle}
+              <button
+                type="button"
+                onClick={() =>
+                  run("covers", () =>
+                    generateCovers(publication.id, { addLogo }),
+                  )
+                }
+                disabled={busy !== null}
+                className="btn btn-primary btn-block"
+              >
+                <IconCheck size={18} />
+                {busy === "covers"
+                  ? "Habillage…"
+                  : "Valider et habiller les 3 formats"}
+              </button>
+              {/* Basculer vers la génération : confirmation « image supprimée ». */}
+              <button
+                type="button"
+                onClick={() => setPendingSwitch("create")}
+                disabled={busy !== null}
+                className="btn btn-secondary btn-block"
+              >
+                <IconSparkle
+                  size={17}
+                  className="text-[color:var(--accent-ink)]"
+                />
+                Créer une image
+              </button>
+            </>
+          )}
+        </div>
+      )}
+
+      {/* Confirmation de bascule de chemin (générer ↔ importer) : la source
+          courante est écartée et on repart du choix initial. */}
+      {pendingSwitch && (
+        <div
+          role="alertdialog"
+          aria-modal="true"
+          aria-label="Confirmer le changement de méthode"
+          onClick={() => busy === null && setPendingSwitch(null)}
+          className="fixed inset-x-0 bottom-0 z-50 flex justify-center p-4"
+        >
+          <div
+            onClick={(event) => event.stopPropagation()}
+            className="flex w-full max-w-md flex-col gap-3 rounded-xl border border-current/15 bg-background p-4 shadow-lg"
+          >
+            <p className="text-sm font-medium">
+              {pendingSwitch === "import"
+                ? "Importer une image ?"
+                : "Créer une image ?"}
+            </p>
+            <p className="text-xs opacity-70">
+              {pendingSwitch === "import"
+                ? "L’image générée et vos réglages seront perdus."
+                : "L’image importée sera supprimée."}{" "}
+              Vous repartirez du choix de départ.
+            </p>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => setPendingSwitch(null)}
+                disabled={busy !== null}
+                className="btn btn-secondary flex-1"
+              >
+                Annuler
+              </button>
+              <button
+                type="button"
+                onClick={confirmSwitch}
+                disabled={busy !== null}
+                className="btn btn-danger flex-1"
+              >
+                Continuer
+              </button>
             </div>
           </div>
-
-          <a
-            href={publication.image_source!}
-            download
-            className="btn btn-ghost self-start text-sm"
-          >
-            <IconDownload size={17} />
-            Télécharger l’image source
-          </a>
-
-          {adjustPanel}
         </div>
       )}
 
