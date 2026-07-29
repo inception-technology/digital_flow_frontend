@@ -562,36 +562,42 @@ export function CoverStep({ publicationId }: { publicationId: string }) {
 
   // Un bouton d'import réutilisé sur l'écran initial et parmi les actions. La
   // dimension est vérifiée avant l'envoi : trop petite, l'image donnerait des
-  // variantes floues une fois rognée dans les trois formats.
+  // variantes floues une fois rognée dans les trois formats. La ligne d'aide
+  // format accompagne toujours le bouton — y compris après une génération.
   const coverUpload = (label: string) => (
-    <label className={`${ACTION} cursor-pointer text-center`}>
-      {busy === "upload" ? "Envoi…" : label}
-      <input
-        type="file"
-        accept="image/png,image/jpeg,image/webp"
-        className="hidden"
-        disabled={busy !== null}
-        onChange={async (event) => {
-          const file = event.target.files?.[0];
-          event.target.value = "";
-          if (!file) return;
-          setError(null);
-          let size: { width: number; height: number };
-          try {
-            size = await readImageSize(file);
-          } catch {
-            setError("Image illisible — utilisez un png, un jpg ou un webp.");
-            return;
-          }
-          const check = checkCoverDimensions(size.width, size.height);
-          if (!check.ok) {
-            setError(check.message);
-            return;
-          }
-          run("upload", () => uploadCover(publication.id, file));
-        }}
-      />
-    </label>
+    <div className="flex flex-col gap-1">
+      <label className={`${ACTION} cursor-pointer text-center`}>
+        {busy === "upload" ? "Envoi…" : label}
+        <input
+          type="file"
+          accept="image/png,image/jpeg,image/webp"
+          className="hidden"
+          disabled={busy !== null}
+          onChange={async (event) => {
+            const file = event.target.files?.[0];
+            event.target.value = "";
+            if (!file) return;
+            setError(null);
+            let size: { width: number; height: number };
+            try {
+              size = await readImageSize(file);
+            } catch {
+              setError("Image illisible — utilisez un png, un jpg ou un webp.");
+              return;
+            }
+            const check = checkCoverDimensions(size.width, size.height);
+            if (!check.ok) {
+              setError(check.message);
+              return;
+            }
+            run("upload", () => uploadCover(publication.id, file));
+          }}
+        />
+      </label>
+      <p className="text-xs opacity-60">
+        png, jpg ou webp · au moins 1080×1080 px pour les trois formats.
+      </p>
+    </div>
   );
 
   return (
@@ -685,10 +691,18 @@ export function CoverStep({ publicationId }: { publicationId: string }) {
       {!hasCovers && !hasSource && (
         <div className="mb-6 flex flex-col gap-3 rounded-lg border border-current/15 p-4">
           <p className="text-sm">
-            Une image va être créée à partir du titre et du style. Vous la
-            validerez avant qu’elle ne soit déclinée et habillée dans les trois
-            formats.
+            Partez de votre propre image ou laissez l’IA en créer une. Dans les
+            deux cas, vous la validerez avant qu’elle ne soit déclinée et habillée
+            dans les trois formats.
           </p>
+          {coverUpload("Importer ma propre image")}
+
+          <div className="flex items-center gap-3 text-xs opacity-50">
+            <span className="h-px flex-1 bg-current/20" />
+            ou
+            <span className="h-px flex-1 bg-current/20" />
+          </div>
+
           {promptField}
           {promptSources}
           <button
@@ -705,16 +719,6 @@ export function CoverStep({ publicationId }: { publicationId: string }) {
           </button>
           <p className="text-xs opacity-60">
             Cela prend une trentaine de secondes.
-          </p>
-
-          <div className="flex items-center gap-3 text-xs opacity-50">
-            <span className="h-px flex-1 bg-current/20" />
-            ou
-            <span className="h-px flex-1 bg-current/20" />
-          </div>
-          {coverUpload("Importer ma propre image")}
-          <p className="text-xs opacity-60">
-            png, jpg ou webp · au moins 1080×1080 px pour les trois formats.
           </p>
         </div>
       )}
