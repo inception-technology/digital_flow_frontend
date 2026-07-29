@@ -10,6 +10,7 @@ import {
   coversDownloadUrl,
   deleteCover,
   deleteCoverSet,
+  deleteImageSource,
   deletePublication,
   fetchProfile,
   fetchPublication,
@@ -299,10 +300,6 @@ export function CoverStep({ publicationId }: { publicationId: string }) {
   // qu'aucun n'est choisi, seuls les deux boutons s'affichent ; le clic ne
   // révèle que les contrôles du chemin retenu.
   const [imageMode, setImageMode] = useState<"create" | "import" | null>(null);
-  // Une source (générée ou importée) écartée par l'utilisateur qui repart de
-  // zéro : on réaffiche le choix Créer/Importer au lieu de la validation. La
-  // source réelle est remplacée à la prochaine génération/import (cf. handlers).
-  const [sourceDiscarded, setSourceDiscarded] = useState(false);
   // Bascule de chemin demandée depuis l'écran de validation (après ≥ 1 source) :
   // déclenche la confirmation « tout sera perdu » avant de repartir de zéro.
   const [pendingSwitch, setPendingSwitch] = useState<"create" | "import" | null>(
@@ -464,8 +461,6 @@ export function CoverStep({ publicationId }: { publicationId: string }) {
 
   // Lance (ou relance) la génération de l'image source avec le prompt, les
   // sources et la référence courants. Le seul point qui consomme une génération.
-  // Génère (ou régénère) l'image source. Réinitialise `sourceDiscarded` **au
-  // succès** — la nouvelle source devient la source courante et doit s'afficher.
   async function generateImage() {
     if (!publication) return;
     setBusy("generation");
@@ -479,7 +474,6 @@ export function CoverStep({ publicationId }: { publicationId: string }) {
           referenceB64: reference?.b64,
         }),
       );
-      setSourceDiscarded(false);
     } catch (caught) {
       setError(
         caught instanceof ApiError
@@ -511,8 +505,6 @@ export function CoverStep({ publicationId }: { publicationId: string }) {
     setBusy("upload");
     try {
       setPublication(await uploadCover(publication.id, file));
-      // L'image importée devient la source courante (cf. generateImage).
-      setSourceDiscarded(false);
     } catch (caught) {
       setError(
         caught instanceof ApiError
@@ -524,15 +516,29 @@ export function CoverStep({ publicationId }: { publicationId: string }) {
     }
   }
 
-  // Confirme la bascule de chemin (générer ↔ importer) : on écarte la source
-  // courante et on revient au choix initial, dans le mode demandé. La source
-  // réelle sera remplacée au prochain « Lancer » / « Choisir un fichier ».
-  function confirmSwitch() {
-    if (!pendingSwitch) return;
-    setSourceDiscarded(true);
-    setImageMode(pendingSwitch);
-    setAdjusting(false);
+  // Confirme la bascule de chemin (générer ↔ importer) : la source courante est
+  // réellement supprimée côté serveur (endpoint DELETE), puis on revient au
+  // choix initial dans le mode demandé. La suppression suffit à réafficher le
+  // choix (plus de `image_source` → showChoiceStep).
+  async function confirmSwitch() {
+    if (!pendingSwitch || !publication) return;
+    const target = pendingSwitch;
     setPendingSwitch(null);
+    setBusy("cover");
+    setError(null);
+    try {
+      setPublication(await deleteImageSource(publication.id));
+      setImageMode(target);
+      setAdjusting(false);
+    } catch (caught) {
+      setError(
+        caught instanceof ApiError
+          ? caught.message
+          : "La suppression a échoué — réessayez.",
+      );
+    } finally {
+      setBusy(null);
+    }
   }
 
   async function copyPrompt() {
@@ -633,8 +639,8 @@ export function CoverStep({ publicationId }: { publicationId: string }) {
   const sourceFromGeneration = hasSource && !!publication.image_prompt;
   // Écran de validation de la source vs choix initial Créer/Importer. Une source
   // « écartée » (bascule de chemin confirmée) renvoie au choix initial.
-  const showSourceStep = !hasCovers && hasSource && !sourceDiscarded;
-  const showChoiceStep = !hasCovers && (!hasSource || sourceDiscarded);
+  const showSourceStep = !hasCovers && hasSource;
+  const showChoiceStep = !hasCovers && !hasSource;
   // Le titre et l'artiste sont incrustés dans les pochettes : on ne les édite
   // que tant que ces pochettes restent régénérables. Une vidéo rendue (ou en
   // cours), ou un projet publié, les fige — le titre n'est alors plus modifiable.
