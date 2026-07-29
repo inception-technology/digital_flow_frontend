@@ -53,13 +53,10 @@ const VIDEO_LABELS: Record<string, string> = {
 
 const VIDEO_ORDER = ["landscape", "vertical"];
 
-const ACTION =
-  "rounded-lg border border-current/20 px-4 py-3 text-sm font-medium disabled:cursor-not-allowed disabled:opacity-40";
-
-// Bouton d'import : teinté (indigo) pour se distinguer du bouton neutre de
-// génération, en clair comme en sombre.
-const IMPORT_ACTION =
-  "rounded-lg border border-indigo-500/40 bg-indigo-500/10 px-4 py-3 text-center text-sm font-medium text-indigo-700 disabled:cursor-not-allowed disabled:opacity-40 dark:text-indigo-300";
+// Action secondaire pleine largeur (contour neutre). Import et génération
+// partagent désormais la même boîte : plus de langage de bouton propre à
+// l'import (audit reco #1, #16).
+const ACTION = "btn btn-secondary btn-block";
 
 // Lit un fichier en base64 (sans le préfixe `data:...;base64,`), pour l'envoyer
 // comme image de référence dans le corps JSON de la génération.
@@ -80,6 +77,72 @@ function formatElapsed(seconds: number): string {
   const minutes = Math.floor(seconds / 60);
   return `${minutes}:${String(seconds % 60).padStart(2, "0")}`;
 }
+
+// Jeu d'icônes de l'écran (24×24, trait courant) — posées à côté des libellés
+// d'action pour lever l'ambiguïté entre les deux chemins « créer » / « importer »
+// et les régénérations (audit reco #1, #3).
+type IconProps = { size?: number; className?: string };
+const svgBase = (size: number, className?: string) => ({
+  width: size,
+  height: size,
+  viewBox: "0 0 24 24",
+  fill: "none",
+  stroke: "currentColor",
+  strokeWidth: 1.7,
+  strokeLinecap: "round" as const,
+  strokeLinejoin: "round" as const,
+  "aria-hidden": true,
+  className,
+});
+const IconSparkle = ({ size = 20, className }: IconProps) => (
+  <svg {...svgBase(size, className)}>
+    <path d="M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9z" />
+    <path d="M18.5 15.5l.8 2.2 2.2.8-2.2.8-.8 2.2-.8-2.2-2.2-.8 2.2-.8z" />
+  </svg>
+);
+const IconUpload = ({ size = 20, className }: IconProps) => (
+  <svg {...svgBase(size, className)}>
+    <path d="M12 20V8" />
+    <path d="M7 12l5-5 5 5" />
+    <path d="M4 4h16" />
+  </svg>
+);
+const IconRefresh = ({ size = 18, className }: IconProps) => (
+  <svg {...svgBase(size, className)}>
+    <path d="M20 6v5h-5" />
+    <path d="M19.4 11a7.5 7.5 0 1 0-2 6.4" />
+  </svg>
+);
+const IconCheck = ({ size = 18, className }: IconProps) => (
+  <svg {...svgBase(size, className)} strokeWidth={2.1}>
+    <path d="M4 12.5l5.5 5.5L20 6.5" />
+  </svg>
+);
+const IconChevron = ({ size = 18, className }: IconProps) => (
+  <svg {...svgBase(size, className)} strokeWidth={1.8}>
+    <path d="M6 9l6 6 6-6" />
+  </svg>
+);
+const IconArrow = ({ size = 18, className }: IconProps) => (
+  <svg {...svgBase(size, className)} strokeWidth={1.8}>
+    <path d="M4 12h15" />
+    <path d="M13 6l6 6-6 6" />
+  </svg>
+);
+const IconMore = ({ size = 18, className }: IconProps) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor" aria-hidden className={className}>
+    <circle cx="5" cy="12" r="1.7" />
+    <circle cx="12" cy="12" r="1.7" />
+    <circle cx="19" cy="12" r="1.7" />
+  </svg>
+);
+const IconDownload = ({ size = 18, className }: IconProps) => (
+  <svg {...svgBase(size, className)}>
+    <path d="M12 3v12" />
+    <path d="M7 11l5 5 5-5" />
+    <path d="M4 20h16" />
+  </svg>
+);
 
 type Busy =
   | null
@@ -214,6 +277,13 @@ export function CoverStep({ publicationId }: { publicationId: string }) {
   const [connectedPlatforms, setConnectedPlatforms] = useState<string[]>([]);
   const [targets, setTargets] = useState({ youtube: true, soundcloud: true });
   const [confirmingPublish, setConfirmingPublish] = useState(false);
+  // Échec de publication par plateforme (audit reco #15) : un échec YouTube
+  // n'efface pas un succès SoundCloud, et chaque plateforme porte son propre
+  // « Réessayer ».
+  const [publishErrors, setPublishErrors] = useState<{
+    youtube?: string;
+    soundcloud?: string;
+  }>({});
   // Cibles fines : playlist YouTube (chargée à la demande) et genre SoundCloud.
   const [playlists, setPlaylists] = useState<YoutubePlaylist[] | null>(null);
   const [playlistId, setPlaylistId] = useState("");
@@ -221,6 +291,15 @@ export function CoverStep({ publicationId }: { publicationId: string }) {
   const [genre, setGenre] = useState("");
   const [genreSeeded, setGenreSeeded] = useState(false);
   const [enlarged, setEnlarged] = useState<CoverFormat | null>(null);
+  // Panneau « Ajuster la génération » : direction créative, sources et image de
+  // référence. Replié par défaut pour ne pas rouvrir le formulaire de génération
+  // sous les résultats (audit reco #11).
+  const [adjusting, setAdjusting] = useState(false);
+  // Format de pochette en attente de confirmation de suppression : la
+  // suppression est destructrice et sort de la ligne d'actions (audit reco #4).
+  const [pendingCoverDelete, setPendingCoverDelete] = useState<string | null>(
+    null,
+  );
   // Avancement du rendu : nombre de formats prêts + temps écoulé, pour un
   // indicateur vivant pendant les quelques minutes que dure le rendu.
   const [renderDone, setRenderDone] = useState(0);
@@ -370,6 +449,40 @@ export function CoverStep({ publicationId }: { publicationId: string }) {
     }
   }
 
+  // Lance (ou relance) la génération de l'image source avec le prompt, les
+  // sources et la référence courants. Le seul point qui consomme une génération.
+  function generateImage() {
+    if (!publication) return;
+    run("generation", () =>
+      generateCover(publication.id, {
+        prompt,
+        useTitle,
+        useStyle,
+        referenceB64: reference?.b64,
+      }),
+    );
+  }
+
+  // Validation d'un fichier de pochette importé (format + dimension) avant
+  // l'envoi : trop petit, il donnerait des variantes floues une fois rogné.
+  async function handleCoverFile(file: File | undefined) {
+    if (!file || !publication) return;
+    setError(null);
+    let size: { width: number; height: number };
+    try {
+      size = await readImageSize(file);
+    } catch {
+      setError("Image illisible — utilisez un png, un jpg ou un webp.");
+      return;
+    }
+    const check = checkCoverDimensions(size.width, size.height);
+    if (!check.ok) {
+      setError(check.message);
+      return;
+    }
+    run("upload", () => uploadCover(publication.id, file));
+  }
+
   async function copyPrompt() {
     if (!publication?.image_prompt) return;
     try {
@@ -497,11 +610,15 @@ export function CoverStep({ publicationId }: { publicationId: string }) {
   const allPublished = ytPublished && scPublished;
   const anyPublished = ytPublished || scPublished;
 
+  // Étape courante du parcours réel à quatre attentes (audit reco #6) : la même
+  // barre nommée, ici pilotée par l'état de la publication.
+  const currentStep = hasVideos && !isRendering ? 4 : isRendering ? 3 : 2;
+  const STEPS = ["Audio", "Image", "Vidéo", "Publication"];
+
   async function handlePublish() {
     if (!publication) return;
     setBusy("publish");
     setError(null);
-    const failures: string[] = [];
     try {
       // On enregistre d'abord les textes à l'écran : le backend publie les
       // textes stockés, pas ceux du brouillon. Un échec ici stoppe tout — on ne
@@ -518,24 +635,10 @@ export function CoverStep({ publicationId }: { publicationId: string }) {
         );
       }
       // Chaque plateforme est indépendante : un échec sur l'une n'empêche pas
-      // l'autre. La réponse de chaque appel porte l'état à jour cumulé.
-      if (willPublishYT) {
-        try {
-          setPublication(
-            await publishYoutube(publication.id, privacy, playlistId, language),
-          );
-        } catch (caught) {
-          failures.push(`YouTube : ${caught instanceof ApiError ? caught.message : "échec"}`);
-        }
-      }
-      if (willPublishSC) {
-        try {
-          setPublication(await publishSoundcloud(publication.id, sharing, genre));
-        } catch (caught) {
-          failures.push(`SoundCloud : ${caught instanceof ApiError ? caught.message : "échec"}`);
-        }
-      }
-      if (failures.length) setError(failures.join(" · "));
+      // l'autre, et l'échec s'affiche sur la ligne concernée (pas en message
+      // global), avec son propre « Réessayer » (audit reco #15).
+      if (willPublishYT) await publishTo("youtube");
+      if (willPublishSC) await publishTo("soundcloud");
     } catch (caught) {
       setError(
         caught instanceof ApiError
@@ -545,6 +648,38 @@ export function CoverStep({ publicationId }: { publicationId: string }) {
     } finally {
       setBusy(null);
       setConfirmingPublish(false);
+    }
+  }
+
+  // Publie sur une seule plateforme et note son résultat. Réutilisé par l'envoi
+  // groupé et par le « Réessayer » d'une plateforme en échec (audit reco #15).
+  async function publishTo(which: "youtube" | "soundcloud") {
+    if (!publication) return;
+    try {
+      if (which === "youtube") {
+        setPublication(
+          await publishYoutube(publication.id, privacy, playlistId, language),
+        );
+      } else {
+        setPublication(await publishSoundcloud(publication.id, sharing, genre));
+      }
+      setPublishErrors((current) => ({ ...current, [which]: undefined }));
+    } catch (caught) {
+      setPublishErrors((current) => ({
+        ...current,
+        [which]: caught instanceof ApiError ? caught.message : "échec",
+      }));
+    }
+  }
+
+  // « Réessayer » d'une plateforme : gère seul l'état occupé (hors envoi groupé).
+  async function retryPublish(which: "youtube" | "soundcloud") {
+    setBusy("publish");
+    setError(null);
+    try {
+      await publishTo(which);
+    } finally {
+      setBusy(null);
     }
   }
 
@@ -615,13 +750,13 @@ export function CoverStep({ publicationId }: { publicationId: string }) {
             type="button"
             onClick={() => setReference(null)}
             disabled={busy !== null}
-            className="shrink-0 text-xs font-medium text-red-700 disabled:opacity-40 dark:text-red-400"
+            className="shrink-0 text-xs font-medium text-[color:var(--danger-ink)] disabled:opacity-40"
           >
             Retirer
           </button>
         </div>
       ) : (
-        <label className={`${ACTION} cursor-pointer text-center`}>
+        <label className={`${ACTION} cursor-pointer`}>
           Choisir une image de référence
           <input
             type="file"
@@ -658,48 +793,43 @@ export function CoverStep({ publicationId }: { publicationId: string }) {
     </label>
   );
 
-  // Un bouton d'import réutilisé sur l'écran initial et parmi les actions. La
-  // dimension est vérifiée avant l'envoi : trop petite, l'image donnerait des
-  // variantes floues une fois rognée dans les trois formats. La ligne d'aide
-  // format accompagne toujours le bouton — y compris après une génération.
-  const coverUpload = (label: string) => (
-    <div className="flex flex-col gap-1">
-      <label className={`${IMPORT_ACTION} cursor-pointer`}>
-        {busy === "upload" ? "Envoi…" : label}
-        <input
-          type="file"
-          accept="image/png,image/jpeg,image/webp"
-          className="hidden"
-          disabled={busy !== null}
-          onChange={async (event) => {
-            const file = event.target.files?.[0];
-            event.target.value = "";
-            if (!file) return;
-            setError(null);
-            let size: { width: number; height: number };
-            try {
-              size = await readImageSize(file);
-            } catch {
-              setError("Image illisible — utilisez un png, un jpg ou un webp.");
-              return;
-            }
-            const check = checkCoverDimensions(size.width, size.height);
-            if (!check.ok) {
-              setError(check.message);
-              return;
-            }
-            run("upload", () => uploadCover(publication.id, file));
-          }}
-        />
-      </label>
-      <p className="text-xs opacity-60">
-        png, jpg ou webp · au moins 1080×1080 px pour les trois formats.
-      </p>
-    </div>
+  // La contrainte de fichier reste affichée en permanence, attachée au bouton
+  // d'import dans tous les états — plus rien ne la fait disparaître (audit #2).
+  const coverConstraint = (
+    <p className="text-xs leading-snug opacity-60">
+      png, jpg ou webp · au moins 1080×1080 px pour les trois formats.
+    </p>
   );
 
-  // Prompt ayant produit l'image, avec un bouton pour le copier (réutilisable
-  // comme point de départ d'un autre prompt). Nul si l'image vient d'un import.
+  // Bouton d'import présentationnel : import et génération partagent la même
+  // boîte (parité stricte, audit #1). La validation format/dimension est
+  // déléguée à `handleCoverFile`.
+  const importButton = (label: string, extra = "") => (
+    <label className={`btn btn-secondary cursor-pointer ${extra}`}>
+      {busy === "upload" ? (
+        "Envoi…"
+      ) : (
+        <>
+          <IconUpload size={20} className="text-[color:var(--accent-ink)]" />
+          {label}
+        </>
+      )}
+      <input
+        type="file"
+        accept="image/png,image/jpeg,image/webp"
+        className="hidden"
+        disabled={busy !== null}
+        onChange={(event) => {
+          const file = event.target.files?.[0];
+          event.target.value = "";
+          handleCoverFile(file);
+        }}
+      />
+    </label>
+  );
+
+  // Prompt ayant produit l'image, replié dans « Ajuster » (audit — le prompt
+  // n'est plus le contenu principal). Nul si l'image vient d'un import.
   const promptBox = publication.image_prompt ? (
     <div className="rounded-lg border border-current/15 bg-current/5 p-3">
       <div className="flex items-center justify-between gap-2">
@@ -736,6 +866,43 @@ export function CoverStep({ publicationId }: { publicationId: string }) {
       <p className="mt-1 whitespace-pre-wrap text-sm">{publication.image_prompt}</p>
     </div>
   ) : null;
+
+  // Panneau « Ajuster la génération » — direction créative, sources prises en
+  // compte et image de référence. Replié par défaut : après une génération, la
+  // décision courante passe avant le formulaire (audit reco #11, #17). La
+  // référence est remontée en tête, c'est le levier le plus efficace.
+  const adjustPanel = (
+    <div className="border-y border-current/10">
+      <button
+        type="button"
+        onClick={() => setAdjusting((open) => !open)}
+        aria-expanded={adjusting}
+        disabled={busy !== null}
+        className="flex w-full items-center gap-2 py-3 text-left disabled:opacity-40"
+      >
+        <IconChevron
+          size={18}
+          className={`text-[color:var(--accent-ink)] transition-transform ${
+            adjusting ? "rotate-180" : ""
+          }`}
+        />
+        <span className="flex-1">
+          <span className="text-sm font-medium">Ajuster la génération</span>
+          <span className="block text-xs opacity-60">
+            Direction créative · image de référence · ce qui est pris en compte
+          </span>
+        </span>
+      </button>
+      {adjusting && (
+        <div className="flex flex-col gap-4 pb-4">
+          {referenceField}
+          {promptField}
+          {promptSources}
+          {promptBox}
+        </div>
+      )}
+    </div>
+  );
 
   return (
     <main className="mx-auto w-full max-w-md flex-1 p-6">
@@ -792,7 +959,7 @@ export function CoverStep({ publicationId }: { publicationId: string }) {
                 type="button"
                 onClick={saveEdit}
                 disabled={busy !== null}
-                className="rounded-lg bg-foreground px-4 py-2 text-sm font-medium text-background disabled:opacity-40"
+                className="btn btn-primary"
               >
                 {busy === "edit" ? "Enregistrement…" : "Enregistrer"}
               </button>
@@ -800,85 +967,113 @@ export function CoverStep({ publicationId }: { publicationId: string }) {
                 type="button"
                 onClick={() => setEditing(false)}
                 disabled={busy !== null}
-                className="rounded-lg border border-current/20 px-4 py-2 text-sm disabled:opacity-40"
+                className="btn btn-secondary"
               >
                 Annuler
               </button>
             </div>
           </div>
         ) : (
-          <div className="flex items-start justify-between gap-3">
-            <div className="min-w-0">
-              <h1 className="text-2xl font-semibold">{publication.title}</h1>
-              <p className="mt-1 text-sm opacity-60">
-                Étape 2 sur 3 — les visuels · {publication.artist_name} ·{" "}
-                {publication.style}
-              </p>
+          <div className="flex flex-col gap-4">
+            {/* Barre à 4 étapes nommées, la même partout (audit reco #6). */}
+            <ol className="flex gap-1.5" aria-label={`Étape ${currentStep} sur 4`}>
+              {STEPS.map((name, index) => {
+                const step = index + 1;
+                const state =
+                  step < currentStep
+                    ? "done"
+                    : step === currentStep
+                      ? "current"
+                      : "todo";
+                return (
+                  <li key={name} className="flex-1">
+                    <div
+                      className={`h-1 rounded-full ${
+                        state === "current"
+                          ? "bg-[color:var(--accent)]"
+                          : state === "done"
+                            ? "bg-[color:var(--accent)]/40"
+                            : "bg-current/15"
+                      }`}
+                    />
+                    <span
+                      className={`mt-1.5 block text-[10px] font-medium uppercase tracking-wide ${
+                        state === "current"
+                          ? "text-[color:var(--accent-ink)]"
+                          : "opacity-50"
+                      }`}
+                      aria-current={state === "current" ? "step" : undefined}
+                    >
+                      {step} {name}
+                    </span>
+                  </li>
+                );
+              })}
+            </ol>
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <h1 className="text-2xl font-semibold">{publication.title}</h1>
+                <p className="mt-1 text-sm opacity-60">
+                  {publication.artist_name} · {publication.style}
+                </p>
+              </div>
+              {!coversFrozen && (
+                <button
+                  type="button"
+                  onClick={openEdit}
+                  className="btn btn-ghost shrink-0 text-sm"
+                >
+                  Modifier
+                </button>
+              )}
             </div>
-            {!coversFrozen && (
-              <button
-                type="button"
-                onClick={openEdit}
-                className="shrink-0 text-sm font-medium underline underline-offset-2"
-              >
-                Modifier
-              </button>
-            )}
           </div>
         )}
       </header>
 
       {!hasCovers && !hasSource && (
-        <div className="mb-6 flex flex-col gap-3 rounded-lg border border-current/15 p-4">
-          <p className="text-sm">
-            Partez de votre propre image ou laissez l’IA en créer une. Dans les
-            deux cas, vous la validerez avant qu’elle ne soit déclinée et habillée
-            dans les trois formats.
+        <div className="mb-6 flex flex-col gap-5">
+          <p className="text-sm leading-relaxed opacity-80">
+            Deux façons de faire. Dans les deux cas, vous validez l’image avant
+            qu’elle ne soit déclinée et habillée dans les trois formats.
           </p>
-          {coverUpload("Importer ma propre image")}
 
-          <div className="flex items-center gap-3 text-xs opacity-50">
-            <span className="h-px flex-1 bg-current/20" />
-            ou
-            <span className="h-px flex-1 bg-current/20" />
+          {/* Deux chemins à parité stricte : même boîte, même rang (audit #1). */}
+          <div className="grid grid-cols-2 gap-3">
+            <div className="flex flex-col gap-2">
+              <button
+                type="button"
+                onClick={generateImage}
+                disabled={busy !== null}
+                className="btn btn-primary min-h-[92px] flex-col"
+              >
+                <IconSparkle size={22} />
+                {busy === "generation" ? "Création…" : "Créer l’image"}
+              </button>
+              <p className="text-xs leading-snug opacity-60">
+                L’IA compose d’après votre titre et votre style. Environ 30 s.
+              </p>
+            </div>
+            <div className="flex flex-col gap-2">
+              {importButton("Importer mon image", "min-h-[92px] flex-col")}
+              {coverConstraint}
+            </div>
           </div>
 
-          {promptField}
-          {promptSources}
-          {referenceField}
-          <button
-            type="button"
-            onClick={() =>
-              run("generation", () =>
-                generateCover(publication.id, {
-                  prompt,
-                  useTitle,
-                  useStyle,
-                  referenceB64: reference?.b64,
-                }),
-              )
-            }
-            disabled={busy !== null}
-            className="rounded-lg bg-foreground px-4 py-3 font-medium text-background disabled:opacity-40"
-          >
-            {busy === "generation" ? "Création en cours…" : "Créer l’image"}
-          </button>
-          <p className="text-xs opacity-60">
-            Cela prend une trentaine de secondes.
-          </p>
+          {adjustPanel}
         </div>
       )}
 
       {!hasCovers && hasSource && (
-        // Validation de l'image source **avant** rognage et habillage : on la
-        // montre en grand, puis « Générer pochettes » la décline et l'habille.
-        <div className="mb-6 flex flex-col gap-4 rounded-lg border border-current/15 p-4">
-          <div>
-            <p className="text-sm font-medium">Validez l’image</p>
-            <p className="mt-1 text-xs opacity-60">
-              Générée ou importée, elle sera rognée dans les trois formats, avec
-              le titre, le nom d’artiste et (au choix) le logo incrustés.
-            </p>
+        // Un seul état à l'écran : l'image à valider, puis les décisions —
+        // valider et habiller, ou refaire. Le formulaire de génération est
+        // replié dans « Ajuster » (audit reco #11).
+        <div className="mb-6 flex flex-col gap-4">
+          <div className="flex items-baseline justify-between gap-3">
+            <h2 className="text-lg font-semibold">Image prête — à vérifier</h2>
+            <span className="shrink-0 text-xs tabular-nums opacity-60">
+              Essai n° {publication.image_generations}
+            </span>
           </div>
 
           {/* Aperçu de la source — image distante signée, courte durée. */}
@@ -888,66 +1083,76 @@ export function CoverStep({ publicationId }: { publicationId: string }) {
             alt="Image à valider, avant habillage"
             className="w-full rounded-lg border border-current/10"
           />
-          <a
-            href={publication.image_source!}
-            download
-            className="text-sm font-medium underline underline-offset-2"
-          >
-            Télécharger l’image source
-          </a>
-
-          {promptBox}
+          <p className="-mt-1 text-xs opacity-60">
+            Elle sera rognée dans les trois formats, avec le titre, le nom
+            d’artiste et (au choix) le logo incrustés.
+          </p>
 
           {logoToggle}
 
+          {/* Décision primaire, une seule, toujours en tête. */}
           <button
             type="button"
             onClick={() =>
               run("covers", () => generateCovers(publication.id, { addLogo }))
             }
             disabled={busy !== null}
-            className="rounded-lg bg-foreground px-4 py-3 font-medium text-background disabled:opacity-40"
+            className="btn btn-primary btn-block"
           >
-            {busy === "covers" ? "Création des pochettes…" : "Générer pochettes"}
+            <IconCheck size={18} />
+            {busy === "covers"
+              ? "Habillage…"
+              : "Valider et habiller les 3 formats"}
           </button>
 
-          <div className="flex items-center gap-3 text-xs opacity-50">
-            <span className="h-px flex-1 bg-current/20" />
-            sinon
-            <span className="h-px flex-1 bg-current/20" />
+          {/* Deux replis à parité : nouvel essai (consomme) / importer. */}
+          <div className="grid grid-cols-2 gap-3">
+            <div className="flex flex-col gap-1">
+              <button
+                type="button"
+                onClick={generateImage}
+                disabled={busy !== null}
+                className="btn btn-secondary btn-block"
+              >
+                <IconRefresh size={17} className="text-[color:var(--accent-ink)]" />
+                {busy === "generation" ? "Essai…" : "Nouvel essai"}
+              </button>
+              <p className="text-xs leading-snug opacity-60">
+                Consomme une génération.
+              </p>
+            </div>
+            <div className="flex flex-col gap-1">
+              {importButton("Importer", "btn-block")}
+              {coverConstraint}
+            </div>
           </div>
 
-          {promptField}
-          {promptSources}
-          {referenceField}
-          <button
-            type="button"
-            onClick={() =>
-              run("generation", () =>
-                generateCover(publication.id, {
-                  prompt,
-                  useTitle,
-                  useStyle,
-                  referenceB64: reference?.b64,
-                }),
-              )
-            }
-            disabled={busy !== null}
-            className={ACTION}
+          <a
+            href={publication.image_source!}
+            download
+            className="btn btn-ghost self-start text-sm"
           >
-            {busy === "generation" ? "Création en cours…" : "Regénérer l’image"}
-          </button>
-          {coverUpload("Importer ma propre image")}
+            <IconDownload size={17} />
+            Télécharger l’image source
+          </a>
+
+          {adjustPanel}
         </div>
       )}
 
-      {hasCovers && publication.image_prompt && (
-        <div className="mb-4">{promptBox}</div>
+      {hasCovers && (
+        <div className="mb-4 flex items-baseline justify-between gap-3">
+          <h2 className="text-lg font-semibold">Vos pochettes — à vérifier</h2>
+          <span className="shrink-0 text-xs tabular-nums opacity-60">
+            Essai n° {publication.image_generations}
+          </span>
+        </div>
       )}
 
       {hasCovers && (
         // Empilement vertical : sur téléphone, un défilement horizontal
-        // cachait les visuels suivants. Chaque aperçu s'agrandit au clic.
+        // cachait les visuels suivants. L'agrandissement se fait par l'icône
+        // sur l'aperçu — plus de ligne « appuyez pour agrandir » répétée.
         <ul className="mb-6 flex flex-col gap-4">
           {covers.map((cover) => (
             <li key={cover.ratio} className="flex flex-col gap-2">
@@ -955,7 +1160,7 @@ export function CoverStep({ publicationId }: { publicationId: string }) {
                 type="button"
                 onClick={() => setEnlarged(cover)}
                 aria-label={`Agrandir ${RATIO_LABELS[cover.ratio] ?? cover.ratio}`}
-                className="flex items-center justify-center rounded-lg border border-current/15 bg-current/5 p-2"
+                className="relative flex items-center justify-center rounded-lg border border-current/15 bg-current/5 p-2"
               >
                 {/* Image distante signée et de durée courte : le pipeline
                     d'optimisation de Next n'apporterait rien ici. */}
@@ -965,28 +1170,39 @@ export function CoverStep({ publicationId }: { publicationId: string }) {
                   alt={`Aperçu ${RATIO_LABELS[cover.ratio] ?? cover.ratio}`}
                   className="max-h-80 w-auto rounded"
                 />
+                <span
+                  aria-hidden
+                  className="absolute right-3 top-3 flex h-8 w-8 items-center justify-center rounded-md bg-black/55 text-white backdrop-blur"
+                >
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M15 3h6v6" />
+                    <path d="M9 21H3v-6" />
+                    <path d="M21 3l-7 7" />
+                    <path d="M3 21l7-7" />
+                  </svg>
+                </span>
               </button>
-              <div className="flex items-end justify-between gap-3">
+              <div className="flex items-center justify-between gap-3">
                 <div className="min-w-0">
                   <p className="text-sm font-medium">
                     {RATIO_LABELS[cover.ratio] ?? cover.ratio}
                   </p>
                   <p className="text-xs tabular-nums opacity-60">
-                    {cover.ratio} · {cover.width}×{cover.height} · appuyez pour
-                    agrandir
+                    {cover.ratio} · {cover.width}×{cover.height}
                   </p>
                 </div>
-                <div className="flex shrink-0 items-center gap-3 text-xs">
+                <div className="flex shrink-0 items-center gap-1">
                   <a
                     href={cover.url}
                     download
-                    className="font-medium underline underline-offset-2"
+                    aria-label={`Télécharger ${RATIO_LABELS[cover.ratio] ?? cover.ratio}`}
+                    className="btn btn-secondary btn-icon"
                   >
-                    Télécharger
+                    <IconDownload size={17} />
                   </a>
                   {isCoverLocked(cover.ratio) ? (
                     <span
-                      className="opacity-50"
+                      className="px-2 text-xs opacity-50"
                       title="Cette pochette a servi au rendu de la vidéo"
                     >
                       Utilisée
@@ -994,15 +1210,12 @@ export function CoverStep({ publicationId }: { publicationId: string }) {
                   ) : (
                     <button
                       type="button"
-                      onClick={() =>
-                        run("cover", () =>
-                          deleteCover(publication.id, cover.ratio),
-                        )
-                      }
+                      onClick={() => setPendingCoverDelete(cover.ratio)}
                       disabled={busy !== null}
-                      className="font-medium text-red-700 disabled:opacity-40 dark:text-red-400"
+                      aria-label={`Autres actions — ${RATIO_LABELS[cover.ratio] ?? cover.ratio}`}
+                      className="btn btn-ghost btn-icon text-[color:var(--foreground)]"
                     >
-                      Supprimer
+                      <IconMore size={18} />
                     </button>
                   )}
                 </div>
@@ -1010,86 +1223,6 @@ export function CoverStep({ publicationId }: { publicationId: string }) {
             </li>
           ))}
         </ul>
-      )}
-
-      {hasCovers && (
-        <a
-          href={coversDownloadUrl(publication.id)}
-          className={`${ACTION} mb-6 block text-center`}
-        >
-          {hasSource
-            ? "Télécharger les 4 images (source + 3 pochettes, zip)"
-            : "Télécharger les 3 pochettes (zip)"}
-        </a>
-      )}
-
-      {publication.cover_history.length > 0 && (
-        <section className="mb-6">
-          <h2 className="mb-2 text-sm font-medium opacity-70">
-            Générations précédentes
-          </h2>
-          <ul className="flex flex-col gap-3">
-            {publication.cover_history.map((set) => (
-              <li
-                key={set.id}
-                className="flex items-center gap-3 rounded-lg border border-current/15 p-3"
-              >
-                <div className="flex gap-1">
-                  {[...set.covers]
-                    .sort(
-                      (a, b) =>
-                        RATIO_ORDER.indexOf(a.ratio) -
-                        RATIO_ORDER.indexOf(b.ratio),
-                    )
-                    .map((cover) => (
-                      <button
-                        key={cover.ratio}
-                        type="button"
-                        onClick={() => setEnlarged(cover)}
-                        aria-label={`Agrandir ${RATIO_LABELS[cover.ratio] ?? cover.ratio}`}
-                        className="shrink-0"
-                      >
-                        {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img
-                          src={cover.url}
-                          alt={RATIO_LABELS[cover.ratio] ?? cover.ratio}
-                          className="h-12 w-12 rounded object-cover"
-                        />
-                      </button>
-                    ))}
-                </div>
-                <div className="min-w-0 flex-1">
-                  <p className="text-xs opacity-60">
-                    {new Date(set.created_at).toLocaleString("fr-FR", {
-                      dateStyle: "short",
-                      timeStyle: "short",
-                    })}
-                  </p>
-                  <div className="mt-1 flex gap-3 text-xs">
-                    <a
-                      href={coverSetDownloadUrl(publication.id, set.id)}
-                      className="font-medium underline underline-offset-2"
-                    >
-                      Télécharger les 3
-                    </a>
-                    <button
-                      type="button"
-                      onClick={() =>
-                        run("cover", () =>
-                          deleteCoverSet(publication.id, set.id),
-                        )
-                      }
-                      disabled={busy !== null}
-                      className="font-medium text-red-700 disabled:opacity-40 dark:text-red-400"
-                    >
-                      Supprimer
-                    </button>
-                  </div>
-                </div>
-              </li>
-            ))}
-          </ul>
-        </section>
       )}
 
       {enlarged && (
@@ -1113,6 +1246,54 @@ export function CoverStep({ publicationId }: { publicationId: string }) {
           >
             Fermer
           </button>
+        </div>
+      )}
+
+      {/* Confirmation de suppression d'un format (audit reco #4) : action
+          destructrice sortie de la ligne d'actions et toujours confirmée. */}
+      {pendingCoverDelete && (
+        <div
+          role="alertdialog"
+          aria-modal="true"
+          aria-label="Confirmer la suppression du format"
+          onClick={() => setPendingCoverDelete(null)}
+          className="fixed inset-x-0 bottom-0 z-50 flex justify-center p-4"
+        >
+          <div
+            onClick={(event) => event.stopPropagation()}
+            className="flex w-full max-w-md flex-col gap-3 rounded-xl border border-current/15 bg-background p-4 shadow-lg"
+          >
+            <p className="text-sm font-medium">
+              Supprimer «{" "}
+              {RATIO_LABELS[pendingCoverDelete] ?? pendingCoverDelete} » ?
+            </p>
+            <p className="text-xs opacity-70">
+              Ce format sera exclu de la diffusion. Vous pourrez le régénérer
+              tant que la vidéo n’est pas rendue.
+            </p>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => setPendingCoverDelete(null)}
+                disabled={busy !== null}
+                className="btn btn-secondary flex-1"
+              >
+                Annuler
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  const ratio = pendingCoverDelete;
+                  setPendingCoverDelete(null);
+                  run("cover", () => deleteCover(publication.id, ratio));
+                }}
+                disabled={busy !== null}
+                className="btn btn-danger flex-1"
+              >
+                Supprimer
+              </button>
+            </div>
+          </div>
         </div>
       )}
 
@@ -1410,6 +1591,21 @@ export function CoverStep({ publicationId }: { publicationId: string }) {
                     </select>
                   )}
                 </div>
+                {!ytPublished && publishErrors.youtube && (
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-xs font-medium text-[color:var(--danger-ink)]">
+                      Échec : {publishErrors.youtube}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => retryPublish("youtube")}
+                      disabled={busy !== null}
+                      className="btn btn-ghost text-xs"
+                    >
+                      Réessayer
+                    </button>
+                  </div>
+                )}
                 {!ytPublished && (
                   <label className="flex items-center justify-between gap-3 text-sm">
                     <span>Langue</span>
@@ -1507,6 +1703,21 @@ export function CoverStep({ publicationId }: { publicationId: string }) {
                     </select>
                   ) : null}
                 </div>
+                {!scPublished && publishErrors.soundcloud && (
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-xs font-medium text-[color:var(--danger-ink)]">
+                      Échec : {publishErrors.soundcloud}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => retryPublish("soundcloud")}
+                      disabled={busy !== null || !scConnected}
+                      className="btn btn-ghost text-xs"
+                    >
+                      Réessayer
+                    </button>
+                  </div>
+                )}
                 {!scPublished && scConnected && (
                   <label className="flex items-center justify-between gap-3 text-sm">
                     <span>Genre</span>
@@ -1547,7 +1758,7 @@ export function CoverStep({ publicationId }: { publicationId: string }) {
                   type="button"
                   onClick={() => setConfirmingPublish(true)}
                   disabled={busy !== null || !anyTargetSelected}
-                  className="rounded-lg bg-foreground px-4 py-3 font-medium text-background disabled:cursor-not-allowed disabled:opacity-40"
+                  className="btn btn-primary btn-block"
                 >
                   {busy === "publish" ? "Publication en cours…" : "Publier →"}
                 </button>
@@ -1559,100 +1770,177 @@ export function CoverStep({ publicationId }: { publicationId: string }) {
             )}
           </div>
         </section>
-      ) : (
+      ) : isRendering ? (
+        <div className="flex flex-col gap-3 rounded-lg border border-current/15 p-4">
+          <div className="flex items-baseline justify-between gap-3">
+            <p className="text-sm font-medium">
+              Rendu des vidéos… format {Math.min(renderDone + 1, renderTotal)} sur{" "}
+              {renderTotal}
+            </p>
+            <p className="shrink-0 text-xs tabular-nums opacity-60">
+              {formatElapsed(elapsed)}
+            </p>
+          </div>
+          <div
+            role="progressbar"
+            aria-valuenow={renderDone}
+            aria-valuemin={0}
+            aria-valuemax={renderTotal}
+            aria-label="Avancement du rendu"
+            className="h-2 overflow-hidden rounded-full bg-current/10"
+          >
+            <div
+              className="h-full bg-[color:var(--accent)] transition-[width] duration-500"
+              style={{ width: `${(renderDone / renderTotal) * 100}%` }}
+            />
+          </div>
+          <p className="text-xs opacity-60">
+            Chaque format prend une à deux minutes. Vous pouvez fermer cette
+            page : vous retrouverez la publication sur l’accueil, à « À
+            reprendre ».
+          </p>
+        </div>
+      ) : hasCovers ? (
+        // Après habillage : quatre décisions, pas onze contrôles (audit #11).
+        // La génération est repliée dans « Ajuster ».
         <div className="flex flex-col gap-3">
-          {hasCovers && !isRendering && (
-            <>
-              {/* Ré-habillage à partir de la même image (basculer le logo) —
-                  gratuit : n'appelle que Pillow, pas le modèle. */}
-              {hasSource && (
-                <>
-                  {logoToggle}
-                  <button
-                    type="button"
-                    onClick={() =>
-                      run("covers", () =>
-                        generateCovers(publication.id, { addLogo }),
-                      )
-                    }
-                    disabled={busy !== null}
-                    className={ACTION}
-                  >
-                    {busy === "covers"
-                      ? "Mise à jour des pochettes…"
-                      : "Régénérer les pochettes (habillage)"}
-                  </button>
-                </>
-              )}
+          {/* Décision primaire — une seule, en tête. */}
+          <button
+            type="button"
+            onClick={() => run("render", () => startRender(publication.id))}
+            disabled={busy !== null}
+            className="btn btn-primary btn-block"
+          >
+            {busy === "render" ? "Lancement…" : "J’accepte ces visuels"}
+            <IconArrow size={18} />
+          </button>
+          <p className="text-center text-xs opacity-60">
+            Lance les 2 vidéos. Rien n’est publié à cette étape.
+          </p>
 
-              {promptField}
-              {promptSources}
-              {referenceField}
+          {publication.cover_history.length > 0 && (
+            <section className="mt-1">
+              <h2 className="mb-2 text-sm font-medium opacity-70">
+                Essais précédents — accessibles à tout moment
+              </h2>
+              <ul className="flex flex-col gap-3">
+                {publication.cover_history.map((set) => (
+                  <li
+                    key={set.id}
+                    className="flex items-center gap-3 rounded-lg border border-current/15 p-3"
+                  >
+                    <div className="flex gap-1">
+                      {[...set.covers]
+                        .sort(
+                          (a, b) =>
+                            RATIO_ORDER.indexOf(a.ratio) -
+                            RATIO_ORDER.indexOf(b.ratio),
+                        )
+                        .map((cover) => (
+                          <button
+                            key={cover.ratio}
+                            type="button"
+                            onClick={() => setEnlarged(cover)}
+                            aria-label={`Agrandir ${RATIO_LABELS[cover.ratio] ?? cover.ratio}`}
+                            className="shrink-0"
+                          >
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            <img
+                              src={cover.url}
+                              alt={RATIO_LABELS[cover.ratio] ?? cover.ratio}
+                              className="h-12 w-12 rounded object-cover"
+                            />
+                          </button>
+                        ))}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-xs opacity-60">
+                        {new Date(set.created_at).toLocaleString("fr-FR", {
+                          dateStyle: "short",
+                          timeStyle: "short",
+                        })}
+                      </p>
+                      <div className="mt-1 flex gap-3 text-xs">
+                        <a
+                          href={coverSetDownloadUrl(publication.id, set.id)}
+                          className="font-medium underline underline-offset-2"
+                        >
+                          Télécharger les 3
+                        </a>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            run("cover", () =>
+                              deleteCoverSet(publication.id, set.id),
+                            )
+                          }
+                          disabled={busy !== null}
+                          className="font-medium text-[color:var(--danger-ink)] disabled:opacity-40"
+                        >
+                          Supprimer
+                        </button>
+                      </div>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            </section>
+          )}
+
+          {/* Deux replis à parité : nouvel essai (consomme) / importer. */}
+          <div className="mt-1 grid grid-cols-2 gap-3">
+            <div className="flex flex-col gap-1">
+              <button
+                type="button"
+                onClick={generateImage}
+                disabled={busy !== null}
+                className="btn btn-secondary btn-block"
+              >
+                <IconRefresh size={17} className="text-[color:var(--accent-ink)]" />
+                {busy === "generation" ? "Essai…" : "Nouvel essai"}
+              </button>
+              <p className="text-xs leading-snug opacity-60">
+                Consomme une génération.
+              </p>
+            </div>
+            <div className="flex flex-col gap-1">
+              {importButton("Importer", "btn-block")}
+              {coverConstraint}
+            </div>
+          </div>
+
+          {/* Actions gratuites / tertiaires. */}
+          <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
+            {hasSource && (
               <button
                 type="button"
                 onClick={() =>
-                  run("generation", () =>
-                    generateCover(publication.id, {
-                      prompt,
-                      useTitle,
-                      useStyle,
-                      referenceB64: reference?.b64,
-                    }),
-                  )
+                  run("covers", () => generateCovers(publication.id, { addLogo }))
                 }
                 disabled={busy !== null}
-                className={ACTION}
+                className="btn btn-ghost text-sm"
               >
-                {busy === "generation" ? "Création en cours…" : "Regénérer l’image"}
+                <IconRefresh size={16} />
+                {busy === "covers"
+                  ? "Habillage…"
+                  : "Refaire l’habillage — gratuit"}
               </button>
-
-              {coverUpload("Utiliser ma propre image")}
-            </>
-          )}
-
-          {isRendering ? (
-            <div className="flex flex-col gap-3 rounded-lg border border-current/15 p-4">
-              <div className="flex items-baseline justify-between gap-3">
-                <p className="text-sm font-medium">
-                  Rendu des vidéos… format {Math.min(renderDone + 1, renderTotal)}{" "}
-                  sur {renderTotal}
-                </p>
-                <p className="shrink-0 text-xs tabular-nums opacity-60">
-                  {formatElapsed(elapsed)}
-                </p>
-              </div>
-              <div
-                role="progressbar"
-                aria-valuenow={renderDone}
-                aria-valuemin={0}
-                aria-valuemax={renderTotal}
-                aria-label="Avancement du rendu"
-                className="h-2 overflow-hidden rounded-full bg-current/10"
-              >
-                <div
-                  className="h-full bg-foreground transition-[width] duration-500"
-                  style={{ width: `${(renderDone / renderTotal) * 100}%` }}
-                />
-              </div>
-              <p className="text-xs opacity-60">
-                Chaque format prend une à deux minutes. Vous pouvez laisser cette
-                page ouverte — elle se met à jour toute seule.
-              </p>
-            </div>
-          ) : (
-            <button
-              type="button"
-              onClick={() => run("render", () => startRender(publication.id))}
-              disabled={!hasCovers || busy !== null}
-              className="rounded-lg bg-foreground px-4 py-3 font-medium text-background disabled:cursor-not-allowed disabled:opacity-40"
+            )}
+            <a
+              href={coversDownloadUrl(publication.id)}
+              className="btn btn-ghost text-sm"
             >
-              {busy === "render"
-                ? "Lancement du rendu…"
-                : "J’accepte ces visuels — lancer les vidéos →"}
-            </button>
-          )}
+              <IconDownload size={16} />
+              {hasSource
+                ? "Tout télécharger (source + 3, .zip)"
+                : "Tout télécharger (.zip)"}
+            </a>
+          </div>
+          {hasSource && <div className="text-sm">{logoToggle}</div>}
+
+          {adjustPanel}
         </div>
-      )}
+      ) : null}
 
       <footer className="mt-12 border-t border-current/10 pt-4">
         {isPublished ? (
@@ -1669,7 +1957,7 @@ export function CoverStep({ publicationId }: { publicationId: string }) {
             type="button"
             onClick={() => setPendingAction("delete")}
             disabled={busy !== null || working}
-            className="text-sm font-medium text-red-700 disabled:opacity-40 dark:text-red-400"
+            className="text-sm font-medium text-[color:var(--danger-ink)] disabled:opacity-40"
           >
             Supprimer ce projet
           </button>
@@ -1706,7 +1994,7 @@ export function CoverStep({ publicationId }: { publicationId: string }) {
                 type="button"
                 onClick={() => setConfirmingPublish(false)}
                 disabled={busy !== null}
-                className="flex-1 rounded-lg border border-current/20 px-4 py-2.5 text-sm font-medium disabled:opacity-40"
+                className="btn btn-secondary flex-1"
               >
                 Annuler
               </button>
@@ -1714,7 +2002,7 @@ export function CoverStep({ publicationId }: { publicationId: string }) {
                 type="button"
                 onClick={handlePublish}
                 disabled={busy !== null}
-                className="flex-1 rounded-lg bg-foreground px-4 py-2.5 text-sm font-medium text-background disabled:opacity-60"
+                className="btn btn-primary flex-1"
               >
                 {busy === "publish" ? "Publication…" : "Publier"}
               </button>
@@ -1763,7 +2051,7 @@ export function CoverStep({ publicationId }: { publicationId: string }) {
                 type="button"
                 onClick={() => setPendingAction(null)}
                 disabled={working}
-                className="flex-1 rounded-lg border border-current/20 px-4 py-2.5 text-sm font-medium disabled:opacity-40"
+                className="btn btn-secondary flex-1"
               >
                 Annuler
               </button>
@@ -1773,8 +2061,8 @@ export function CoverStep({ publicationId }: { publicationId: string }) {
                 disabled={working}
                 className={
                   pendingAction === "delete"
-                    ? "flex-1 rounded-lg bg-red-600 px-4 py-2.5 text-sm font-medium text-white disabled:opacity-60"
-                    : "flex-1 rounded-lg bg-foreground px-4 py-2.5 text-sm font-medium text-background disabled:opacity-60"
+                    ? "btn btn-danger flex-1"
+                    : "btn btn-primary flex-1"
                 }
               >
                 {working

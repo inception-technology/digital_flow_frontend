@@ -10,11 +10,11 @@ import {
   fetchProfile,
   fetchStyles,
   logout,
-  soundcloudLoginUrl,
   updateArtistName,
   type CustomStyleInfo,
   type Profile,
 } from "@/lib/api";
+import { PlatformList } from "@/components/platform-list";
 
 const SOUNDCLOUD_FEEDBACK: Record<string, string> = {
   connecte: "SoundCloud est maintenant connecté.",
@@ -31,6 +31,9 @@ export default function SettingsPage() {
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
   const [platformNotice, setPlatformNotice] = useState<string | null>(null);
+  // La déconnexion passe par une confirmation : impossible en un seul tap
+  // (audit reco #10).
+  const [confirmingLogout, setConfirmingLogout] = useState(false);
 
   // Styles musicaux personnalisés du créateur (en plus des styles intégrés).
   const [styles, setStyles] = useState<CustomStyleInfo[]>([]);
@@ -73,6 +76,16 @@ export default function SettingsPage() {
   useEffect(() => {
     if (!loading && !profile) router.replace("/");
   }, [loading, profile, router]);
+
+  // Échap ferme la confirmation de déconnexion (sauf pendant l'appel).
+  useEffect(() => {
+    if (!confirmingLogout) return;
+    const close = (event: KeyboardEvent) => {
+      if (event.key === "Escape" && busy === null) setConfirmingLogout(false);
+    };
+    window.addEventListener("keydown", close);
+    return () => window.removeEventListener("keydown", close);
+  }, [confirmingLogout, busy]);
 
   async function handleCreateStyle(event: React.FormEvent) {
     event.preventDefault();
@@ -138,6 +151,8 @@ export default function SettingsPage() {
           : "La déconnexion a échoué — réessayez.",
       );
       setBusy(null);
+      // Referme la modale pour laisser voir le message d'erreur.
+      setConfirmingLogout(false);
     }
     // Pas de `finally` : en cas de succès la navigation est en cours.
   }
@@ -196,7 +211,7 @@ export default function SettingsPage() {
         <button
           type="submit"
           disabled={busy !== null || artistName === (profile.artist_name ?? "")}
-          className="mt-2 rounded-lg bg-foreground px-4 py-3 font-medium text-background disabled:cursor-not-allowed disabled:opacity-40"
+          className="btn btn-primary mt-2"
         >
           {busy === "save"
             ? "Enregistrement…"
@@ -227,7 +242,7 @@ export default function SettingsPage() {
                 <button
                   type="button"
                   onClick={() => handleDeleteStyle(style.name)}
-                  className="shrink-0 text-xs font-medium text-red-700 dark:text-red-400"
+                  className="shrink-0 text-xs font-medium text-[color:var(--danger-ink)]"
                 >
                   Supprimer
                 </button>
@@ -263,7 +278,7 @@ export default function SettingsPage() {
           <button
             type="submit"
             disabled={styleBusy || !styleName.trim() || !styleMood.trim()}
-            className="rounded-lg border border-current/20 px-4 py-3 text-sm font-medium disabled:cursor-not-allowed disabled:opacity-40"
+            className="btn btn-secondary"
           >
             {styleBusy ? "Création…" : "Créer le style"}
           </button>
@@ -277,43 +292,61 @@ export default function SettingsPage() {
             {platformNotice}
           </p>
         )}
-        <ul className="flex flex-col gap-2">
-          <li className="flex items-center justify-between rounded-lg border border-current/15 p-3 text-sm">
-            <span>YouTube</span>
-            {profile.connected_platforms.includes("youtube") ? (
-              <span className="font-medium text-green-700 dark:text-green-400">
-                ✓ Connecté
-              </span>
-            ) : (
-              <span className="opacity-60">Non connecté</span>
-            )}
-          </li>
-          <li className="flex items-center justify-between rounded-lg border border-current/15 p-3 text-sm">
-            <span>SoundCloud</span>
-            {profile.connected_platforms.includes("soundcloud") ? (
-              <span className="font-medium text-green-700 dark:text-green-400">
-                ✓ Connecté
-              </span>
-            ) : (
-              <a
-                href={soundcloudLoginUrl}
-                className="font-medium underline underline-offset-2"
-              >
-                Connecter
-              </a>
-            )}
-          </li>
-        </ul>
+        {/* Liste partagée avec l'accueil — une seule source (audit reco #8). */}
+        <PlatformList connected={profile.connected_platforms} />
       </section>
 
       <button
         type="button"
-        onClick={handleLogout}
+        onClick={() => setConfirmingLogout(true)}
         disabled={busy !== null}
-        className="w-full rounded-lg border border-current/20 px-4 py-3 text-sm font-medium disabled:cursor-not-allowed disabled:opacity-40"
+        className="btn btn-danger btn-block"
       >
-        {busy === "logout" ? "Déconnexion…" : "Se déconnecter"}
+        Se déconnecter
       </button>
+
+      {confirmingLogout && (
+        // Confirmation avant déconnexion : une déconnexion accidentelle impose
+        // une nouvelle authentification Google (audit reco #10).
+        <div
+          role="alertdialog"
+          aria-modal="true"
+          aria-label="Confirmer la déconnexion"
+          onClick={() => busy === null && setConfirmingLogout(false)}
+          className="fixed inset-x-0 bottom-0 z-50 flex justify-center p-4"
+        >
+          <div
+            onClick={(event) => event.stopPropagation()}
+            className="flex w-full max-w-md flex-col gap-3 rounded-xl border border-current/15 bg-background p-4 shadow-lg"
+          >
+            <div>
+              <p className="text-sm font-medium">Se déconnecter ?</p>
+              <p className="mt-1 text-xs opacity-70">
+                Vous devrez vous reconnecter avec Google pour revenir. Vos
+                publications restent en place.
+              </p>
+            </div>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => setConfirmingLogout(false)}
+                disabled={busy !== null}
+                className="btn btn-secondary flex-1"
+              >
+                Annuler
+              </button>
+              <button
+                type="button"
+                onClick={handleLogout}
+                disabled={busy !== null}
+                className="btn btn-danger flex-1"
+              >
+                {busy === "logout" ? "Déconnexion…" : "Se déconnecter"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </main>
   );
 }
