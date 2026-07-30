@@ -96,7 +96,12 @@ export type PublicationSummary = {
   title: string;
   status: string;
   created_at: string;
+  style: string;
+  audio_duration_s: number;
   thumbnail_url: string | null;
+  /** URL de diffusion par plateforme : présente = publié sur la plateforme. */
+  youtube_url: string | null;
+  soundcloud_url: string | null;
 };
 
 export const loginUrl = `${API_URL}/api/auth/google/login`;

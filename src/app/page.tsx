@@ -11,6 +11,7 @@ import {
   type PublicationSummary,
 } from "@/lib/api";
 import { PlatformList } from "@/components/platform-list";
+import { PLATFORMS } from "@/lib/constants";
 
 // Statut d'une publication : un libellé explicite porte l'information, la
 // couleur ne fait que la redoubler (audit reco #7 — plus de statut porté par la
@@ -50,6 +51,58 @@ function formatDateTime(iso: string): string {
     dateStyle: "short",
     timeStyle: "short",
   });
+}
+
+/** Durée d'un morceau en m:ss. */
+function formatDuration(seconds: number): string {
+  const total = Math.max(0, Math.round(seconds));
+  const minutes = Math.floor(total / 60);
+  const rest = total % 60;
+  return `${minutes}:${String(rest).padStart(2, "0")}`;
+}
+
+/** Une coche par plateforme visée (audit reco #8 — même liste partout) :
+ * verte = publié, orange = pas encore publié, grise = plateforme pas encore
+ * branchée (TikTok). L'URL présente sur la ligne = publié sur la plateforme. */
+function PlatformChecks({ publication }: { publication: PublicationSummary }) {
+  const urls: Record<string, string | null> = {
+    youtube: publication.youtube_url,
+    soundcloud: publication.soundcloud_url,
+  };
+  return (
+    <span className="flex items-center gap-1">
+      {PLATFORMS.map((platform) => {
+        const published = Boolean(urls[platform.key]);
+        const { color, opacity, state } = platform.comingSoon
+          ? { color: "currentColor", opacity: 0.3, state: "bientôt disponible" }
+          : published
+            ? { color: "var(--success-ink)", opacity: 1, state: "publié" }
+            : { color: "var(--warning-ink)", opacity: 1, state: "pas encore publié" };
+        return (
+          <span
+            key={platform.key}
+            title={`${platform.label} — ${state}`}
+            style={{ color, opacity }}
+          >
+            <svg
+              width="14"
+              height="14"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2.4"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              aria-hidden
+            >
+              <path d="M4 12.5l5.5 5.5L20 6.5" />
+            </svg>
+            <span className="sr-only">{`${platform.label} : ${state}`}</span>
+          </span>
+        );
+      })}
+    </span>
+  );
 }
 
 /** Initiales de repli quand le compte Google n'a pas d'avatar. */
@@ -110,9 +163,18 @@ function PublicationRow({ publication }: { publication: PublicationSummary }) {
         <Thumbnail url={publication.thumbnail_url} />
         <span className="flex min-w-0 flex-1 flex-col gap-1">
           <span className="truncate font-medium">{publication.title}</span>
-          <span className="flex items-center gap-2">
+          <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
             <StatusChip status={publication.status} />
-            <span className="text-xs tabular-nums opacity-60">
+            <PlatformChecks publication={publication} />
+          </span>
+          <span className="flex items-center gap-1.5 text-xs opacity-60">
+            <span className="tabular-nums">
+              {formatDuration(publication.audio_duration_s)}
+            </span>
+            <span aria-hidden>·</span>
+            <span className="truncate">{publication.style}</span>
+            <span aria-hidden>·</span>
+            <span className="tabular-nums">
               {formatDateTime(publication.created_at)}
             </span>
           </span>
