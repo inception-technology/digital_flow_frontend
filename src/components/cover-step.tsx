@@ -1533,11 +1533,22 @@ export function CoverStep({ publicationId }: { publicationId: string }) {
 
       {hasVideos && !isRendering ? (
         <section className="flex flex-col gap-4">
-          <div>
-            <h2 className="text-lg font-semibold">Vos vidéos sont prêtes</h2>
-            <p className="mt-1 text-sm opacity-60">
-              Téléchargez chaque format et publiez-le sur la plateforme
-              correspondante.
+          <div className="flex flex-col gap-2">
+            <div className="flex items-start justify-between gap-3">
+              <h2 className="text-lg font-semibold">
+                {allPublished ? "Morceau en ligne" : "Vos vidéos sont prêtes"}
+              </h2>
+              {anyPublished && (
+                <span className="badge-success shrink-0">
+                  <IconCheck size={13} />
+                  {allPublished ? "Publié" : "En ligne"}
+                </span>
+              )}
+            </div>
+            <p className="text-sm opacity-60">
+              {anyPublished
+                ? "Les liens de diffusion sont plus bas, dans « Publier »."
+                : "Téléchargez chaque format et publiez-le sur la plateforme correspondante."}
             </p>
           </div>
           {videos.map((video) => (
@@ -1550,11 +1561,8 @@ export function CoverStep({ publicationId }: { publicationId: string }) {
                 controls
                 className="w-full rounded-lg border border-current/15 bg-black"
               />
-              <a
-                href={video.url}
-                download
-                className={`${ACTION} text-center`}
-              >
+              <a href={video.url} download className={ACTION}>
+                <IconDownload size={17} />
                 Télécharger cette vidéo
               </a>
             </div>
@@ -1572,8 +1580,9 @@ export function CoverStep({ publicationId }: { publicationId: string }) {
                     )
                   }
                   disabled={busy !== null}
-                  className="shrink-0 text-xs font-medium underline underline-offset-2 disabled:opacity-40"
+                  className="btn btn-ghost shrink-0 text-xs"
                 >
+                  <IconSparkle size={14} />
                   {busy === "metadata-gen"
                     ? "Rédaction…"
                     : publication.metadata.youtube_title
@@ -1757,12 +1766,10 @@ export function CoverStep({ publicationId }: { publicationId: string }) {
                 <div className="flex items-center justify-between gap-3">
                   <label className="flex items-center gap-2 text-sm font-medium">
                     {ytPublished ? (
-                      <span
-                        aria-hidden
-                        className="text-green-700 dark:text-green-400"
-                      >
-                        ✓
-                      </span>
+                      <IconCheck
+                        size={16}
+                        className="text-[color:var(--success-ink)]"
+                      />
                     ) : (
                       <input
                         type="checkbox"
@@ -1784,7 +1791,7 @@ export function CoverStep({ publicationId }: { publicationId: string }) {
                       href={publication.youtube_url ?? "#"}
                       target="_blank"
                       rel="noreferrer"
-                      className="text-sm font-medium text-green-700 underline underline-offset-2 dark:text-green-400"
+                      className="text-sm font-medium text-[color:var(--success-ink)] underline underline-offset-2"
                     >
                       Voir
                     </a>
@@ -1871,12 +1878,10 @@ export function CoverStep({ publicationId }: { publicationId: string }) {
                 <div className="flex items-center justify-between gap-3">
                   <label className="flex items-center gap-2 text-sm font-medium">
                     {scPublished ? (
-                      <span
-                        aria-hidden
-                        className="text-green-700 dark:text-green-400"
-                      >
-                        ✓
-                      </span>
+                      <IconCheck
+                        size={16}
+                        className="text-[color:var(--success-ink)]"
+                      />
                     ) : (
                       <input
                         type="checkbox"
@@ -1898,7 +1903,7 @@ export function CoverStep({ publicationId }: { publicationId: string }) {
                       href={publication.soundcloud_url ?? "#"}
                       target="_blank"
                       rel="noreferrer"
-                      className="text-sm font-medium text-green-700 underline underline-offset-2 dark:text-green-400"
+                      className="text-sm font-medium text-[color:var(--success-ink)] underline underline-offset-2"
                     >
                       Écouter
                     </a>
