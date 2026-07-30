@@ -144,6 +144,12 @@ const IconDownload = ({ size = 18, className }: IconProps) => (
     <path d="M4 20h16" />
   </svg>
 );
+const IconClock = ({ size = 18, className }: IconProps) => (
+  <svg {...svgBase(size, className)}>
+    <circle cx="12" cy="12" r="9" />
+    <path d="M12 7v5l3.5 2" />
+  </svg>
+);
 
 type Busy =
   | null
@@ -310,6 +316,10 @@ export function CoverStep({ publicationId }: { publicationId: string }) {
   const [pendingCoverDelete, setPendingCoverDelete] = useState<string | null>(
     null,
   );
+  // Étape 4 : une fois les vidéos rendues (étape 3), le créateur passe
+  // explicitement à la publication via « Continuer vers la publication ». Tant
+  // que ce n'est pas fait, on reste sur l'écran « vidéos prêtes » (étape 3).
+  const [showPublication, setShowPublication] = useState(false);
   // Avancement du rendu : nombre de formats prêts + temps écoulé, pour un
   // indicateur vivant pendant les quelques minutes que dure le rendu.
   const [renderDone, setRenderDone] = useState(0);
@@ -674,10 +684,20 @@ export function CoverStep({ publicationId }: { publicationId: string }) {
   const allPublished = ytPublished && scPublished;
   const anyPublished = ytPublished || scPublished;
 
+  // Étape 4 (Post) : atteinte quand les vidéos sont prêtes ET que le créateur a
+  // choisi de passer à la publication (ou qu'une plateforme est déjà publiée).
+  // Sinon, vidéos prêtes = fin de l'étape 3 (Vidéo).
+  const atPublication =
+    hasVideos && !isRendering && (showPublication || anyPublished);
   // Étape courante du parcours réel à quatre attentes (audit reco #6) : la même
   // barre nommée, ici pilotée par l'état de la publication.
-  const currentStep = hasVideos && !isRendering ? 4 : isRendering ? 3 : 2;
+  const currentStep = atPublication ? 4 : isRendering || hasVideos ? 3 : 2;
   const STEPS = ["Audio", "Image", "Vidéo", "Post"];
+
+  // La galerie de pochettes « à vérifier » n'appartient qu'à l'étape 2 (Image).
+  // Dès le rendu (étape 3) et la publication (étape 4), on ne réaffiche plus les
+  // pochettes : la vidéo puis les textes prennent le relais.
+  const showCoversGallery = hasCovers && !isRendering && !hasVideos;
 
   async function handlePublish() {
     if (!publication) return;
@@ -1356,7 +1376,7 @@ export function CoverStep({ publicationId }: { publicationId: string }) {
         </div>
       )}
 
-      {hasCovers && (
+      {showCoversGallery && (
         <div className="mb-4 flex items-baseline justify-between gap-3">
           <h2 className="text-lg font-semibold">Vos pochettes — à vérifier</h2>
           <span className="shrink-0 text-xs tabular-nums opacity-60">
@@ -1365,7 +1385,7 @@ export function CoverStep({ publicationId }: { publicationId: string }) {
         </div>
       )}
 
-      {hasCovers && (
+      {showCoversGallery && (
         // Empilement vertical : sur téléphone, un défilement horizontal
         // cachait les visuels suivants. L'agrandissement se fait par l'icône
         // sur l'aperçu — plus de ligne « appuyez pour agrandir » répétée.
@@ -1532,11 +1552,15 @@ export function CoverStep({ publicationId }: { publicationId: string }) {
       )}
 
       {hasVideos && !isRendering ? (
+        atPublication ? (
+        // ── ÉTAPE 4 (Post) : uniquement les textes de publication. Les vidéos
+        //    ne sont plus affichées ici ; on y arrive par « Continuer vers la
+        //    publication » depuis l'étape 3, et on peut y revenir.
         <section className="flex flex-col gap-4">
           <div className="flex flex-col gap-2">
             <div className="flex items-start justify-between gap-3">
               <h2 className="text-lg font-semibold">
-                {allPublished ? "Morceau en ligne" : "Vos vidéos sont prêtes"}
+                {allPublished ? "Morceau en ligne" : "Publier votre morceau"}
               </h2>
               {anyPublished && (
                 <span className="badge-success shrink-0">
@@ -1547,26 +1571,19 @@ export function CoverStep({ publicationId }: { publicationId: string }) {
             </div>
             <p className="text-sm opacity-60">
               {anyPublished
-                ? "Les liens de diffusion sont plus bas, dans « Publier »."
-                : "Téléchargez chaque format et publiez-le sur la plateforme correspondante."}
+                ? "Retrouvez les liens de diffusion dans « Publier »."
+                : "Vérifiez les textes, choisissez les plateformes, puis publiez."}
             </p>
+            {!anyPublished && (
+              <button
+                type="button"
+                onClick={() => setShowPublication(false)}
+                className="btn btn-ghost self-start text-sm"
+              >
+                ← Revenir aux vidéos
+              </button>
+            )}
           </div>
-          {videos.map((video) => (
-            <div key={video.output_format} className="flex flex-col gap-2">
-              <p className="text-sm font-medium">
-                {VIDEO_LABELS[video.output_format] ?? video.output_format}
-              </p>
-              <video
-                src={video.url}
-                controls
-                className="w-full rounded-lg border border-current/15 bg-black"
-              />
-              <a href={video.url} download className={ACTION}>
-                <IconDownload size={17} />
-                Télécharger cette vidéo
-              </a>
-            </div>
-          ))}
 
           {meta && !anyPublished && (
             <section className="mt-2 flex flex-col gap-3 border-t border-current/10 pt-4">
@@ -1983,6 +2000,21 @@ export function CoverStep({ publicationId }: { publicationId: string }) {
                 >
                   {busy === "publish" ? "Publication en cours…" : "Publier →"}
                 </button>
+                {/* Programmation différée (roadmap V1.1) : bouton présent mais
+                    inactif, pour annoncer la fonction sans la promettre. */}
+                <button
+                  type="button"
+                  disabled
+                  aria-disabled="true"
+                  title="Programmation différée — bientôt disponible"
+                  className="btn btn-secondary btn-block"
+                >
+                  <IconClock size={17} />
+                  Programmer
+                  <span className="rounded-full bg-current/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide">
+                    Bientôt
+                  </span>
+                </button>
                 <p className="text-xs opacity-60">
                   Les textes ci-dessus sont enregistrés puis utilisés à la
                   publication.
@@ -1991,6 +2023,46 @@ export function CoverStep({ publicationId }: { publicationId: string }) {
             )}
           </div>
         </section>
+        ) : (
+        // ── ÉTAPE 3 (Vidéo) : les vidéos rendues, sans les pochettes. On passe
+        //    ensuite explicitement à la publication (étape 4).
+        <section className="flex flex-col gap-4">
+          <div className="flex flex-col gap-2">
+            <h2 className="text-lg font-semibold">Vos vidéos sont prêtes</h2>
+            <p className="text-sm opacity-60">
+              Regardez chaque format, téléchargez-le si besoin, puis passez à la
+              publication.
+            </p>
+          </div>
+          {videos.map((video) => (
+            <div key={video.output_format} className="flex flex-col gap-2">
+              <p className="text-sm font-medium">
+                {VIDEO_LABELS[video.output_format] ?? video.output_format}
+              </p>
+              <video
+                src={video.url}
+                controls
+                className="w-full rounded-lg border border-current/15 bg-black"
+              />
+              <a href={video.url} download className={ACTION}>
+                <IconDownload size={17} />
+                Télécharger cette vidéo
+              </a>
+            </div>
+          ))}
+          <button
+            type="button"
+            onClick={() => setShowPublication(true)}
+            className="btn btn-primary btn-block"
+          >
+            Continuer vers la publication
+            <IconArrow size={18} />
+          </button>
+          <p className="text-center text-xs opacity-60">
+            Rien n’est publié à cette étape.
+          </p>
+        </section>
+        )
       ) : isRendering ? (
         <div className="flex flex-col gap-3 rounded-lg border border-current/15 p-4">
           <div className="flex items-baseline justify-between gap-3">
@@ -2032,7 +2104,7 @@ export function CoverStep({ publicationId }: { publicationId: string }) {
             disabled={busy !== null}
             className="btn btn-primary btn-block"
           >
-            {busy === "render" ? "Lancement…" : "J’accepte ces visuels"}
+            {busy === "render" ? "Lancement…" : "Continuer vers la vidéo"}
             <IconArrow size={18} />
           </button>
           <p className="text-center text-xs opacity-60">
