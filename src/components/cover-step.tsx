@@ -26,6 +26,7 @@ import {
   updateMetadata,
   updatePublication,
   uploadCover,
+  uploadCoverFormat,
   type CoverFormat,
   type Privacy,
   type Publication,
@@ -34,7 +35,13 @@ import {
   type VideoLanguage,
   type YoutubePlaylist,
 } from "@/lib/api";
-import { checkCoverDimensions, readImageSize } from "@/lib/image";
+import {
+  checkCoverDimensions,
+  checkFormatDimensions,
+  cropNotice,
+  MIN_CROPPED,
+  readImageSize,
+} from "@/lib/image";
 import { MUSIC_STYLES } from "@/lib/constants";
 
 const RATIO_LABELS: Record<string, string> = {
@@ -157,6 +164,7 @@ type Busy =
   | "covers"
   | "edit"
   | "upload"
+  | "cover-format"
   | "render"
   | "publish"
   | "cover"
@@ -305,7 +313,20 @@ export function CoverStep({ publicationId }: { publicationId: string }) {
   // Chemin choisi à l'étape image (écran vierge) : générer ou importer. Tant
   // qu'aucun n'est choisi, seuls les deux boutons s'affichent ; le clic ne
   // révèle que les contrôles du chemin retenu.
-  const [imageMode, setImageMode] = useState<"create" | "import" | null>(null);
+  const [imageMode, setImageMode] = useState<
+    "create" | "import" | "formats" | null
+  >(null);
+  // Chemin « une image par format » : l'habillage se décide cadrage par cadrage
+  // (une miniature déjà textée par le créateur n'a pas à recevoir un second
+  // titre). Absent de la table = habillé, le comportement des autres chemins.
+  const [formatBrand, setFormatBrand] = useState<Record<string, boolean>>({});
+  const [formatLogo, setFormatLogo] = useState<Record<string, boolean>>({});
+  // Cadrage en cours d'envoi : les trois lignes ne se bloquent pas mutuellement
+  // au point d'être illisibles — seule celle qui travaille l'affiche.
+  const [uploadingRatio, setUploadingRatio] = useState<string | null>(null);
+  // Ce que le rognage centré a retiré, par cadrage. Le créateur doit savoir
+  // qu'une partie de son visuel a disparu.
+  const [formatNotice, setFormatNotice] = useState<Record<string, string>>({});
   // Bascule de chemin demandée depuis l'écran de validation (après ≥ 1 source) :
   // déclenche la confirmation « tout sera perdu » avant de repartir de zéro.
   const [pendingSwitch, setPendingSwitch] = useState<"create" | "import" | null>(
@@ -526,6 +547,51 @@ export function CoverStep({ publicationId }: { publicationId: string }) {
     }
   }
 
+  // Import d'une image destinée à **un seul** cadrage. Le contrôle de taille
+  // porte sur le résultat du rognage, pas sur l'image d'origine : c'est ce que
+  // le créateur obtiendra réellement.
+  async function handleFormatFile(ratio: string, file: File | undefined) {
+    if (!file || !publication) return;
+    setError(null);
+    setFormatNotice((current) => ({ ...current, [ratio]: "" }));
+
+    let size: { width: number; height: number };
+    try {
+      size = await readImageSize(file);
+    } catch {
+      setError("Image illisible — utilisez un png, un jpg ou un webp.");
+      return;
+    }
+
+    const check = checkFormatDimensions(ratio, size.width, size.height);
+    if (!check.ok) {
+      setError(check.message);
+      return;
+    }
+    const notice = cropNotice(ratio, size.width, size.height);
+
+    setBusy("cover-format");
+    setUploadingRatio(ratio);
+    try {
+      setPublication(
+        await uploadCoverFormat(publication.id, ratio, file, {
+          brand: formatBrand[ratio] ?? true,
+          addLogo: formatLogo[ratio] ?? true,
+        }),
+      );
+      if (notice) setFormatNotice((current) => ({ ...current, [ratio]: notice }));
+    } catch (caught) {
+      setError(
+        caught instanceof ApiError
+          ? caught.message
+          : "L’envoi a échoué — réessayez.",
+      );
+    } finally {
+      setBusy(null);
+      setUploadingRatio(null);
+    }
+  }
+
   // Confirme la bascule de chemin (générer ↔ importer) : la source courante est
   // réellement supprimée côté serveur (endpoint DELETE), puis on revient au
   // choix initial dans le mode demandé. La suppression suffit à réafficher le
@@ -698,6 +764,17 @@ export function CoverStep({ publicationId }: { publicationId: string }) {
   // Dès le rendu (étape 3) et la publication (étape 4), on ne réaffiche plus les
   // pochettes : la vidéo puis les textes prennent le relais.
   const showCoversGallery = hasCovers && !isRendering && !hasVideos;
+  // Panneau « une image par format » : il survit à la première image importée
+  // (sinon il disparaîtrait dès que `hasCovers` devient vrai), et sert aussi de
+  // point de remplacement depuis la galerie.
+  const showFormatPanel = imageMode === "formats" && !coversFrozen;
+  // Les deux vidéos partent des pochettes 16:9 et 9:16. Sans elles le serveur
+  // refuse le rendu : on le dit ici plutôt que de laisser cliquer pour rien.
+  const missingForVideo = ["16:9", "9:16"].filter(
+    (ratio) => !covers.some((cover) => cover.ratio === ratio),
+  );
+  // Formats fournis directement par le créateur : un ré-habillage les épargne.
+  const manualRatios = publication.cover_manual ?? [];
 
   async function handlePublish() {
     if (!publication) return;
@@ -915,6 +992,119 @@ export function CoverStep({ publicationId }: { publicationId: string }) {
         }}
       />
     </label>
+  );
+
+  // Une ligne par cadrage : aperçu, habillage au choix, et son propre bouton
+  // d'import. Rien n'est déduit d'un autre format — c'est tout l'intérêt du
+  // chemin, et c'est pourquoi chaque ligne porte ses propres cases.
+  const formatPanel = (
+    <ul className="flex flex-col gap-3">
+      {RATIO_ORDER.map((ratio) => {
+        const existing = covers.find((cover) => cover.ratio === ratio);
+        const [minWidth, minHeight] = MIN_CROPPED[ratio];
+        const branded = formatBrand[ratio] ?? true;
+        const withLogo = formatLogo[ratio] ?? true;
+        const sending = uploadingRatio === ratio;
+        return (
+          <li
+            key={ratio}
+            className="flex flex-col gap-2 rounded-lg border border-current/15 p-3"
+          >
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <p className="text-sm font-medium">
+                  {RATIO_LABELS[ratio] ?? ratio}
+                </p>
+                <p className="text-xs tabular-nums opacity-60">
+                  {ratio} · au moins {minWidth}×{minHeight} px
+                </p>
+              </div>
+              {existing && (
+                /* eslint-disable-next-line @next/next/no-img-element */
+                <img
+                  src={existing.url}
+                  alt=""
+                  className="h-12 w-12 shrink-0 rounded object-cover"
+                />
+              )}
+            </div>
+
+            {isCoverLocked(ratio) ? (
+              <p className="text-xs opacity-60">
+                Cette pochette a servi au rendu de la vidéo — elle n’est plus
+                remplaçable.
+              </p>
+            ) : (
+              <>
+                <label className="flex items-center gap-2 text-xs">
+                  <input
+                    type="checkbox"
+                    checked={branded}
+                    onChange={(event) =>
+                      setFormatBrand((current) => ({
+                        ...current,
+                        [ratio]: event.target.checked,
+                      }))
+                    }
+                    disabled={busy !== null}
+                    className="h-4 w-4"
+                  />
+                  Habiller — titre et nom d’artiste
+                </label>
+                <label className="flex items-center gap-2 text-xs">
+                  <input
+                    type="checkbox"
+                    checked={branded && withLogo}
+                    onChange={(event) =>
+                      setFormatLogo((current) => ({
+                        ...current,
+                        [ratio]: event.target.checked,
+                      }))
+                    }
+                    disabled={busy !== null || !branded}
+                    className="h-4 w-4"
+                  />
+                  Incruster le logo
+                </label>
+                <label
+                  aria-disabled={busy !== null}
+                  className={`${ACTION} ${
+                    busy !== null ? "cursor-not-allowed opacity-40" : "cursor-pointer"
+                  }`}
+                >
+                  {sending ? (
+                    "Envoi…"
+                  ) : (
+                    <>
+                      <IconUpload
+                        size={18}
+                        className="text-[color:var(--accent-ink)]"
+                      />
+                      {existing ? "Remplacer cette image" : "Choisir une image"}
+                    </>
+                  )}
+                  <input
+                    type="file"
+                    accept="image/png,image/jpeg,image/webp"
+                    className="hidden"
+                    disabled={busy !== null}
+                    onChange={(event) => {
+                      const file = event.target.files?.[0];
+                      event.target.value = "";
+                      handleFormatFile(ratio, file);
+                    }}
+                  />
+                </label>
+              </>
+            )}
+
+            {formatNotice[ratio] && (
+              <p className="text-xs opacity-60">{formatNotice[ratio]}</p>
+            )}
+          </li>
+        );
+      })}
+    </ul>
   );
 
   // Prompt ayant produit l'image, replié dans « Ajuster » (audit — le prompt
@@ -1178,6 +1368,33 @@ export function CoverStep({ publicationId }: { publicationId: string }) {
             </div>
           </div>
 
+          {/* Troisième chemin, sous les deux premiers : un visuel distinct par
+              plateforme, sans source commune. */}
+          <div className="flex flex-col gap-2">
+            <button
+              type="button"
+              onClick={() => setImageMode("formats")}
+              aria-pressed={imageMode === "formats"}
+              className={`btn btn-block ${
+                imageMode === "formats" ? "btn-primary" : "btn-secondary"
+              }`}
+            >
+              <IconUpload
+                size={20}
+                className={
+                  imageMode === "formats"
+                    ? undefined
+                    : "text-[color:var(--accent-ink)]"
+                }
+              />
+              Une image par format
+            </button>
+            <p className="text-xs leading-snug opacity-60">
+              Trois visuels distincts — miniature, carré, vertical. Aucun n’est
+              déduit des autres.
+            </p>
+          </div>
+
           {/* Chemin « générer » : uniquement les réglages de génération. */}
           {imageMode === "create" && (
             <div className="flex flex-col gap-4 border-t border-current/10 pt-4">
@@ -1203,6 +1420,19 @@ export function CoverStep({ publicationId }: { publicationId: string }) {
               {importButton("Choisir un fichier", "btn-block min-h-[52px]")}
             </div>
           )}
+        </div>
+      )}
+
+      {showFormatPanel && (
+        <div className="mb-6 flex flex-col gap-3 border-t border-current/10 pt-4">
+          {!showChoiceStep && (
+            <h2 className="text-lg font-semibold">Une image par format</h2>
+          )}
+          <p className="text-xs leading-snug opacity-60">
+            Une image d’un autre rapport est recadrée au centre. Aucun format
+            n’est obligatoire, mais les vidéos exigent le 16:9 et le 9:16.
+          </p>
+          {formatPanel}
         </div>
       )}
 
@@ -1379,9 +1609,13 @@ export function CoverStep({ publicationId }: { publicationId: string }) {
       {showCoversGallery && (
         <div className="mb-4 flex items-baseline justify-between gap-3">
           <h2 className="text-lg font-semibold">Vos pochettes — à vérifier</h2>
-          <span className="shrink-0 text-xs tabular-nums opacity-60">
-            Essai n° {publication.image_generations}
-          </span>
+          {/* Le compteur ne veut rien dire sur un parcours d'import : il resterait
+              à « Essai n° 0 ». */}
+          {publication.image_generations > 0 && (
+            <span className="shrink-0 text-xs tabular-nums opacity-60">
+              Essai n° {publication.image_generations}
+            </span>
+          )}
         </div>
       )}
 
@@ -1426,8 +1660,22 @@ export function CoverStep({ publicationId }: { publicationId: string }) {
                   <p className="text-xs tabular-nums opacity-60">
                     {cover.ratio} · {cover.width}×{cover.height}
                   </p>
+                  {manualRatios.includes(cover.ratio) && (
+                    <p className="text-xs opacity-60">Image importée</p>
+                  )}
                 </div>
                 <div className="flex shrink-0 items-center gap-1">
+                  {!isCoverLocked(cover.ratio) && (
+                    <button
+                      type="button"
+                      onClick={() => setImageMode("formats")}
+                      aria-label={`Remplacer ${RATIO_LABELS[cover.ratio] ?? cover.ratio}`}
+                      title="Remplacer par une image à moi"
+                      className="btn btn-secondary btn-icon"
+                    >
+                      <IconUpload size={17} />
+                    </button>
+                  )}
                   <a
                     href={cover.url}
                     download
@@ -2101,14 +2349,18 @@ export function CoverStep({ publicationId }: { publicationId: string }) {
           <button
             type="button"
             onClick={() => run("render", () => startRender(publication.id))}
-            disabled={busy !== null}
+            disabled={busy !== null || missingForVideo.length > 0}
             className="btn btn-primary btn-block"
           >
             {busy === "render" ? "Lancement…" : "Continuer vers la vidéo"}
             <IconArrow size={18} />
           </button>
           <p className="text-center text-xs opacity-60">
-            Lance les 2 vidéos. Rien n’est publié à cette étape.
+            {missingForVideo.length > 0
+              ? `Il manque ${missingForVideo
+                  .map((ratio) => RATIO_LABELS[ratio] ?? ratio)
+                  .join(" et ")} pour lancer les vidéos.`
+              : "Lance les 2 vidéos. Rien n’est publié à cette étape."}
           </p>
 
           {publication.cover_history.length > 0 && (
@@ -2218,6 +2470,12 @@ export function CoverStep({ publicationId }: { publicationId: string }) {
                   ? "Habillage…"
                   : "Refaire l’habillage — gratuit"}
               </button>
+            )}
+            {hasSource && manualRatios.length > 0 && (
+              <p className="w-full text-xs opacity-60">
+                Vos images importées ({manualRatios.join(", ")}) ne seront pas
+                retouchées.
+              </p>
             )}
             <a
               href={coversDownloadUrl(publication.id)}

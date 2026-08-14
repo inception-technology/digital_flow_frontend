@@ -76,6 +76,11 @@ export type Publication = {
   image_source: string | null;
   image_prompt: string | null;
   cover_history: CoverSet[];
+  /**
+   * Formats fournis directement par le créateur (« 16:9 »…), par opposition à
+   * ceux dérivés de l'image source. Un ré-habillage ne les touche pas.
+   */
+  cover_manual: string[];
   videos: VideoFormat[];
   render_error: string | null;
   archived: boolean;
@@ -219,10 +224,18 @@ export function generateCover(
  * logo sur chaque format. Ne consomme aucune génération : la source est déjà
  * facturée. Rejouable pour basculer le logo sans regénérer l'image.
  */
-export function generateCovers(id: string, options: { addLogo?: boolean } = {}): Promise<Publication> {
+export function generateCovers(
+  id: string,
+  options: { addLogo?: boolean; overwriteManual?: boolean } = {},
+): Promise<Publication> {
   return request(`/api/publications/${id}/covers`, {
     method: "POST",
-    body: JSON.stringify({ add_logo: options.addLogo ?? true }),
+    body: JSON.stringify({
+      add_logo: options.addLogo ?? true,
+      // Les formats importés un par un survivent par défaut : les reconstruire
+      // depuis la source reviendrait à les supprimer sans recours.
+      overwrite_manual: options.overwriteManual ?? false,
+    }),
   });
 }
 
@@ -409,6 +422,34 @@ export async function uploadCover(id: string, file: File): Promise<Publication> 
     credentials: "include",
     body,
   });
+
+  if (!response.ok) throw new ApiError(await readDetail(response));
+  return response.json();
+}
+
+/**
+ * Remplace la pochette d'**un seul** format par une image du créateur.
+ *
+ * Contrairement à `uploadCover`, l'image ne devient pas la source des trois
+ * déclinaisons : elle ne sert qu'au cadrage demandé. `brand` décide de
+ * l'habillage (titre, nom d'artiste) ; `addLogo` n'a d'effet que si `brand` est
+ * vrai. L'image est rognée au centre si son rapport diffère du cadrage.
+ */
+export async function uploadCoverFormat(
+  id: string,
+  ratio: string,
+  file: File,
+  options: { brand?: boolean; addLogo?: boolean } = {},
+): Promise<Publication> {
+  const body = new FormData();
+  body.append("file", file);
+  body.append("brand", String(options.brand ?? true));
+  body.append("add_logo", String(options.addLogo ?? true));
+
+  const response = await fetch(
+    `${API_URL}/api/publications/${id}/cover?ratio=${encodeURIComponent(ratio)}`,
+    { method: "PUT", credentials: "include", body },
+  );
 
   if (!response.ok) throw new ApiError(await readDetail(response));
   return response.json();
