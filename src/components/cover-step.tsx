@@ -2270,6 +2270,35 @@ export function CoverStep({ publicationId }: { publicationId: string }) {
               </>
             )}
           </div>
+
+          {/* Une fois publié, l'étape 4 est la seule accessible : `atPublication`
+              est forcé vrai et le lien « ← Revenir aux vidéos » disparaît. Sans
+              ce bloc, les fichiers rendus ne sont plus atteignables du tout, alors
+              qu'ils restent la seule copie locale du travail. On expose donc les
+              téléchargements — pas les lecteurs, pour ne pas ramener l'étape 3
+              dans l'étape 4. */}
+          {anyPublished && hasVideos && (
+            <section className="mt-2 flex flex-col gap-3 border-t border-current/10 pt-4">
+              <div className="flex flex-col gap-1">
+                <h3 className="text-sm font-medium">Vos vidéos</h3>
+                <p className="text-xs opacity-60">
+                  Les fichiers rendus restent téléchargeables après la mise en
+                  ligne.
+                </p>
+              </div>
+              {videos.map((video) => (
+                <a
+                  key={video.output_format}
+                  href={video.url}
+                  download
+                  className={ACTION}
+                >
+                  <IconDownload size={17} />
+                  {VIDEO_LABELS[video.output_format] ?? video.output_format}
+                </a>
+              ))}
+            </section>
+          )}
         </section>
         ) : (
         // ── ÉTAPE 3 (Vidéo) : les vidéos rendues, sans les pochettes. On passe
