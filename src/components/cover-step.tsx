@@ -43,6 +43,13 @@ import {
   readImageSize,
 } from "@/lib/image";
 import { MUSIC_STYLES } from "@/lib/constants";
+import {
+  atPublication as computeAtPublication,
+  currentStep as computeCurrentStep,
+  showCoversGallery as computeShowCoversGallery,
+  showPublishedDownloads,
+  type EtatParcours,
+} from "@/lib/parcours";
 
 const RATIO_LABELS: Record<string, string> = {
   "16:9": "Miniature YouTube",
@@ -750,20 +757,20 @@ export function CoverStep({ publicationId }: { publicationId: string }) {
   const allPublished = ytPublished && scPublished;
   const anyPublished = ytPublished || scPublished;
 
-  // Étape 4 (Post) : atteinte quand les vidéos sont prêtes ET que le créateur a
-  // choisi de passer à la publication (ou qu'une plateforme est déjà publiée).
-  // Sinon, vidéos prêtes = fin de l'étape 3 (Vidéo).
-  const atPublication =
-    hasVideos && !isRendering && (showPublication || anyPublished);
-  // Étape courante du parcours réel à quatre attentes (audit reco #6) : la même
-  // barre nommée, ici pilotée par l'état de la publication.
-  const currentStep = atPublication ? 4 : isRendering || hasVideos ? 3 : 2;
+  // Les règles de navigation vivent dans `lib/parcours.ts` : pures, donc
+  // testables — ce fichier ne l'est pas, et c'est ainsi qu'une impasse vers les
+  // vidéos rendues est passée en production.
+  const etatParcours: EtatParcours = {
+    hasCovers,
+    hasVideos,
+    isRendering,
+    anyPublished,
+    showPublication,
+  };
+  const atPublication = computeAtPublication(etatParcours);
+  const currentStep = computeCurrentStep(etatParcours);
   const STEPS = ["Audio", "Image", "Vidéo", "Post"];
-
-  // La galerie de pochettes « à vérifier » n'appartient qu'à l'étape 2 (Image).
-  // Dès le rendu (étape 3) et la publication (étape 4), on ne réaffiche plus les
-  // pochettes : la vidéo puis les textes prennent le relais.
-  const showCoversGallery = hasCovers && !isRendering && !hasVideos;
+  const showCoversGallery = computeShowCoversGallery(etatParcours);
   // Panneau « une image par format » : il survit à la première image importée
   // (sinon il disparaîtrait dès que `hasCovers` devient vrai), et sert aussi de
   // point de remplacement depuis la galerie.
@@ -2271,18 +2278,18 @@ export function CoverStep({ publicationId }: { publicationId: string }) {
             )}
           </div>
 
-          {/* Une fois publié, l'étape 4 est la seule accessible : `atPublication`
-              est forcé vrai et le lien « ← Revenir aux vidéos » disparaît. Sans
-              ce bloc, les fichiers rendus ne sont plus atteignables du tout, alors
-              qu'ils restent la seule copie locale du travail. On expose donc les
-              téléchargements — pas les lecteurs, pour ne pas ramener l'étape 3
-              dans l'étape 4. */}
-          {anyPublished && hasVideos && (
+          {/* Les fichiers rendus, atteignables depuis l'étape 4 elle-même. Une
+              fois publié, `atPublication` est forcé vrai et le lien « ← Revenir
+              aux vidéos » disparaît : sans ce bloc, les vidéos — seule copie
+              locale du travail — ne seraient plus accessibles nulle part. Des
+              liens, pas des lecteurs, pour ne pas ramener l'étape 3 dans
+              l'étape 4. Règle et cas limites dans `lib/parcours.ts`. */}
+          {showPublishedDownloads(etatParcours) && (
             <section className="mt-2 flex flex-col gap-3 border-t border-current/10 pt-4">
               <div className="flex flex-col gap-1">
                 <h3 className="text-sm font-medium">Vos vidéos</h3>
                 <p className="text-xs opacity-60">
-                  Les fichiers rendus restent téléchargeables après la mise en
+                  Téléchargeables à tout moment, y compris après la mise en
                   ligne.
                 </p>
               </div>
