@@ -16,9 +16,16 @@ import {
 } from "@/lib/api";
 import { PlatformList } from "@/components/platform-list";
 
-const SOUNDCLOUD_FEEDBACK: Record<string, string> = {
-  connecte: "SoundCloud est maintenant connecté.",
-  refus: "Connexion SoundCloud annulée.",
+// Retour des flows OAuth, par paramètre d'URL (`?soundcloud=…`, `?tiktok=…`).
+const PLATFORM_FEEDBACK: Record<string, Record<string, string>> = {
+  soundcloud: {
+    connecte: "SoundCloud est maintenant connecté.",
+    refus: "Connexion SoundCloud annulée.",
+  },
+  tiktok: {
+    connecte: "TikTok est maintenant connecté.",
+    refus: "Connexion TikTok annulée.",
+  },
 };
 
 export default function SettingsPage() {
@@ -42,17 +49,21 @@ export default function SettingsPage() {
   const [styleBusy, setStyleBusy] = useState(false);
   const [styleError, setStyleError] = useState<string | null>(null);
 
-  // Retour du flow OAuth SoundCloud (?soundcloud=connecte|refus). Lu depuis
-  // l'URL sans `useSearchParams` (qui imposerait un Suspense au build), puis
-  // nettoyé pour ne pas rester après un rafraîchissement.
+  // Retour d'un flow OAuth (?soundcloud=… ou ?tiktok=…, valeur connecte|refus).
+  // Lu depuis l'URL sans `useSearchParams` (qui imposerait un Suspense au
+  // build), puis nettoyé pour ne pas rester après un rafraîchissement.
   useEffect(() => {
-    const outcome = new URLSearchParams(window.location.search).get("soundcloud");
-    if (outcome && outcome in SOUNDCLOUD_FEEDBACK) {
-      // Après montage volontairement : lire l'URL au rendu (initialiseur) ou en
-      // SSR divergerait du HTML serveur (mismatch d'hydratation).
-      // eslint-disable-next-line react-hooks/set-state-in-effect
-      setPlatformNotice(SOUNDCLOUD_FEEDBACK[outcome]);
-      window.history.replaceState(null, "", "/parametres");
+    const params = new URLSearchParams(window.location.search);
+    for (const [platform, messages] of Object.entries(PLATFORM_FEEDBACK)) {
+      const outcome = params.get(platform);
+      if (outcome && outcome in messages) {
+        // Après montage volontairement : lire l'URL au rendu (initialiseur) ou
+        // en SSR divergerait du HTML serveur (mismatch d'hydratation).
+        // eslint-disable-next-line react-hooks/set-state-in-effect
+        setPlatformNotice(messages[outcome]);
+        window.history.replaceState(null, "", "/parametres");
+        break;
+      }
     }
   }, []);
 
