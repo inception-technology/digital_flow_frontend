@@ -1,11 +1,16 @@
-import { soundcloudLoginUrl } from "@/lib/api";
+import { soundcloudLoginUrl, tiktokLoginUrl } from "@/lib/api";
 import { PLATFORMS } from "@/lib/constants";
+
+const LOGIN_URLS: Record<string, string> = {
+  soundcloud: soundcloudLoginUrl,
+  tiktok: tiktokLoginUrl,
+};
 
 /**
  * Liste des plateformes, partagée entre l'accueil et les Paramètres (audit
  * reco #8). Chaque ligne est un bouton pleine largeur d'au moins 48 px, libellé
  * à gauche et action à droite — plus de faux champ de formulaire, plus de cible
- * de 20 px. TikTok porte « Bientôt » et n'est pas tapable.
+ * de 20 px. Une plateforme ni connectable ni branchée porte « Bientôt ».
  */
 export function PlatformList({ connected }: { connected: string[] }) {
   return (
@@ -40,7 +45,7 @@ export function PlatformList({ connected }: { connected: string[] }) {
           );
         }
 
-        if (platform.comingSoon) {
+        if (!platform.connectable && platform.comingSoon) {
           return (
             <li
               key={platform.key}
@@ -54,11 +59,11 @@ export function PlatformList({ connected }: { connected: string[] }) {
           );
         }
 
-        // Connectable (SoundCloud) : bouton pleine largeur qui démarre l'OAuth.
+        // Connectable (SoundCloud, TikTok) : bouton pleine largeur qui démarre l'OAuth.
         return (
           <li key={platform.key}>
             <a
-              href={platform.key === "soundcloud" ? soundcloudLoginUrl : "#"}
+              href={LOGIN_URLS[platform.key] ?? "#"}
               className="btn btn-secondary btn-block justify-between"
             >
               <span className="font-medium">{platform.label}</span>
