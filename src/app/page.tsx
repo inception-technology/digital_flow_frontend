@@ -115,9 +115,15 @@ function initials(name: string): string {
     .join("");
 }
 
-/** Vignette carrée de pochette, ou un repère neutre tant qu'aucune n'existe. */
+/** Vignette carrée de pochette, ou un repère neutre tant qu'aucune n'existe —
+ * ou quand le fichier n'est plus sur R2 (l'URL signée est produite sans
+ * vérifier que l'objet existe encore). */
 function Thumbnail({ url }: { url: string | null }) {
-  if (url) {
+  // Mémorise l'URL en échec plutôt qu'un booléen : une nouvelle URL (après
+  // rechargement de la liste) retente l'affichage sans effet de réinitialisation.
+  const [failedUrl, setFailedUrl] = useState<string | null>(null);
+
+  if (url && url !== failedUrl) {
     return (
       // Vignette distante signée (courte durée) : le pipeline d'optimisation de
       // Next n'apporterait rien pour une image déjà dimensionnée.
@@ -125,6 +131,7 @@ function Thumbnail({ url }: { url: string | null }) {
       <img
         src={url}
         alt=""
+        onError={() => setFailedUrl(url)}
         className="h-12 w-12 shrink-0 rounded object-cover"
       />
     );
