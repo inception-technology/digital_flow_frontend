@@ -1,4 +1,4 @@
-import { useState, type CSSProperties } from "react";
+import { useState, type CSSProperties, type ReactNode } from "react";
 
 /**
  * Image distante signée (R2) avec repli : l'URL est signée par le backend sans
@@ -7,6 +7,7 @@ import { useState, type CSSProperties } from "react";
  *
  * `fallbackClassName` / `fallbackStyle` donnent au cadre une taille quand
  * l'image n'en impose pas (ex. `w-auto` qui se dimensionne sur l'image).
+ * `fallback` remplace entièrement le cadre par défaut.
  */
 export function RemoteImage({
   src,
@@ -15,6 +16,7 @@ export function RemoteImage({
   fallbackClassName,
   fallbackStyle,
   showLabel = false,
+  fallback,
 }: {
   src: string;
   alt: string;
@@ -23,6 +25,7 @@ export function RemoteImage({
   fallbackStyle?: CSSProperties;
   /** Ajoute « Image indisponible » sous l'icône (cadres assez grands). */
   showLabel?: boolean;
+  fallback?: ReactNode;
 }) {
   // Mémorise l'URL en échec plutôt qu'un booléen : une nouvelle URL retente
   // l'affichage sans effet de réinitialisation.
@@ -46,6 +49,8 @@ export function RemoteImage({
       />
     );
   }
+
+  if (fallback !== undefined) return fallback;
 
   return (
     <div
