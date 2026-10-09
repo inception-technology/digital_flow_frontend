@@ -2,10 +2,10 @@ name: CI
 
 on:
   pull_request:
-  # Appelé par deploy.yml sur push vers main : le déploiement attend que ce
-  # job soit vert. Pas de déclencheur `push` ici, sinon la CI tournerait deux
-  # fois pour le même commit.
-  workflow_call:
+  # Le déploiement est fait par l'intégration Git native de Vercel ; la CI
+  # vérifie aussi `main` après chaque merge.
+  push:
+    branches: [main]
 
 concurrency:
   group: ci-${{ github.ref }}
