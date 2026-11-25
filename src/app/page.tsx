@@ -11,6 +11,7 @@ import {
   type PublicationSummary,
 } from "@/lib/api";
 import { PlatformList } from "@/components/platform-list";
+import { RemoteImage } from "@/components/remote-image";
 import { PLATFORMS } from "@/lib/constants";
 
 // Statut d'une publication : un libellé explicite porte l'information, la
@@ -115,20 +116,25 @@ function initials(name: string): string {
     .join("");
 }
 
-/** Vignette carrée de pochette, ou un repère neutre tant qu'aucune n'existe. */
+/** Vignette carrée de pochette, ou un repère neutre tant qu'aucune n'existe —
+ * ou quand le fichier n'est plus sur R2 (l'URL signée est produite sans
+ * vérifier que l'objet existe encore). */
 function Thumbnail({ url }: { url: string | null }) {
   if (url) {
     return (
-      // Vignette distante signée (courte durée) : le pipeline d'optimisation de
-      // Next n'apporterait rien pour une image déjà dimensionnée.
-      // eslint-disable-next-line @next/next/no-img-element
-      <img
+      <RemoteImage
         src={url}
         alt=""
         className="h-12 w-12 shrink-0 rounded object-cover"
+        fallback={<NoThumbnail />}
       />
     );
   }
+  return <NoThumbnail />;
+}
+
+/** Repère neutre (note de musique) d'une publication sans vignette. */
+function NoThumbnail() {
   return (
     <div
       aria-hidden

@@ -50,6 +50,7 @@ import {
   showPublishedDownloads,
   type EtatParcours,
 } from "@/lib/parcours";
+import { RemoteImage } from "@/components/remote-image";
 
 const RATIO_LABELS: Record<string, string> = {
   "16:9": "Miniature YouTube",
@@ -1027,8 +1028,7 @@ export function CoverStep({ publicationId }: { publicationId: string }) {
                 </p>
               </div>
               {existing && (
-                /* eslint-disable-next-line @next/next/no-img-element */
-                <img
+                <RemoteImage
                   src={existing.url}
                   alt=""
                   className="h-12 w-12 shrink-0 rounded object-cover"
@@ -1461,11 +1461,12 @@ export function CoverStep({ publicationId }: { publicationId: string }) {
           </div>
 
           {/* Aperçu de la source — image distante signée, courte durée. */}
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
+          <RemoteImage
             src={publication.image_source!}
             alt="Image à valider, avant habillage"
             className="w-full rounded-lg border border-current/10"
+            fallbackClassName="aspect-[3/2] w-full rounded-lg border border-current/10"
+            showLabel
           />
 
           {/* Télécharger cette image (icône, juste sous l'aperçu). */}
@@ -1639,13 +1640,13 @@ export function CoverStep({ publicationId }: { publicationId: string }) {
                 aria-label={`Agrandir ${RATIO_LABELS[cover.ratio] ?? cover.ratio}`}
                 className="relative flex items-center justify-center rounded-lg border border-current/15 bg-current/5 p-2"
               >
-                {/* Image distante signée et de durée courte : le pipeline
-                    d'optimisation de Next n'apporterait rien ici. */}
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
+                <RemoteImage
                   src={cover.url}
                   alt={`Aperçu ${RATIO_LABELS[cover.ratio] ?? cover.ratio}`}
                   className="max-h-80 w-auto rounded"
+                  fallbackClassName="h-48 max-w-full rounded"
+                  fallbackStyle={{ aspectRatio: cover.ratio.replace(":", " / ") }}
+                  showLabel
                 />
                 <span
                   aria-hidden
@@ -1724,11 +1725,13 @@ export function CoverStep({ publicationId }: { publicationId: string }) {
           onClick={() => setEnlarged(null)}
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 p-4"
         >
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
+          <RemoteImage
             src={enlarged.url}
             alt={`Aperçu ${RATIO_LABELS[enlarged.ratio] ?? enlarged.ratio}`}
             className="max-h-full max-w-full rounded object-contain"
+            fallbackClassName="h-48 max-w-full rounded text-white/60"
+            fallbackStyle={{ aspectRatio: enlarged.ratio.replace(":", " / ") }}
+            showLabel
           />
           <button
             type="button"
@@ -2425,8 +2428,7 @@ export function CoverStep({ publicationId }: { publicationId: string }) {
                             aria-label={`Agrandir ${RATIO_LABELS[cover.ratio] ?? cover.ratio}`}
                             className="shrink-0"
                           >
-                            {/* eslint-disable-next-line @next/next/no-img-element */}
-                            <img
+                            <RemoteImage
                               src={cover.url}
                               alt={RATIO_LABELS[cover.ratio] ?? cover.ratio}
                               className="h-12 w-12 rounded object-cover"

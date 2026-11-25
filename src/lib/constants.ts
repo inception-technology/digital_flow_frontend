@@ -30,20 +30,21 @@ export const ACCEPT_ATTRIBUTE = "audio/mpeg,audio/wav,.mp3,.wav";
  *
  * `key` correspond à `connected_platforms` renvoyé par le backend (une
  * plateforme y figure dès qu'un jeton est stocké). YouTube se relie d'office via
- * le login Google ; SoundCloud se relie séparément (`connectable`) ; TikTok
- * n'est pas encore branché (`comingSoon`).
+ * le login Google ; SoundCloud et TikTok se relient séparément (`connectable`).
+ * TikTok se connecte mais ne se publie pas encore (`comingSoon`).
  */
 export type Platform = {
   key: string;
   label: string;
   /** Se relie via son propre flow OAuth (bouton « Connecter »). */
   connectable?: boolean;
-  /** Pas encore branché — affiché « Bientôt », non tapable. */
+  /** Publication pas encore branchée — coche grise sur l'accueil. Sans
+   * `connectable`, affiché « Bientôt » et non tapable dans la liste. */
   comingSoon?: boolean;
 };
 
 export const PLATFORMS: readonly Platform[] = [
   { key: "youtube", label: "YouTube" },
   { key: "soundcloud", label: "SoundCloud", connectable: true },
-  { key: "tiktok", label: "TikTok", comingSoon: true },
+  { key: "tiktok", label: "TikTok", connectable: true, comingSoon: true },
 ];

@@ -112,6 +112,8 @@ export type PublicationSummary = {
 export const loginUrl = `${API_URL}/api/auth/google/login`;
 /** Lien de liaison du compte SoundCloud (démarre le consentement OAuth). */
 export const soundcloudLoginUrl = `${API_URL}/api/auth/soundcloud/login`;
+/** Lien de liaison du compte TikTok (démarre le consentement OAuth). */
+export const tiktokLoginUrl = `${API_URL}/api/auth/tiktok/login`;
 
 export class ApiError extends Error {}
 
