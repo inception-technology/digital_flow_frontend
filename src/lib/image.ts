@@ -65,14 +65,23 @@ export const MIN_CROPPED: Record<string, [number, number]> = {
   "1:1": [1080, 1080],
 };
 
-/** Dimensions du rognage centré, avant réduction au plafond. */
+/**
+ * Dimensions du rognage centré, avant réduction au plafond.
+ *
+ * Renvoie `null` sur un cadrage inconnu plutôt que de laisser la
+ * déstructuration d'un `undefined` lever une `TypeError` : la fonction est
+ * exportée, et un appelant qui n'aurait pas filtré en amont mérite un refus
+ * lisible, pas un écran blanc.
+ */
 export function croppedSize(
   width: number,
   height: number,
   ratio: string,
-): [number, number] {
-  const [maxWidth, maxHeight] = RATIO_MAX[ratio];
-  const target = maxWidth / maxHeight;
+): [number, number] | null {
+  const maximum = RATIO_MAX[ratio];
+  if (!maximum) return null;
+
+  const target = maximum[0] / maximum[1];
   if (width / height > target) return [Math.round(height * target), height];
   return [width, Math.round(width / target)];
 }
@@ -84,9 +93,10 @@ export function checkFormatDimensions(
   height: number,
 ): CoverCheck {
   const minimum = MIN_CROPPED[ratio];
-  if (!minimum) return { ok: false, message: "Format de pochette inconnu." };
+  const cropped = croppedSize(width, height, ratio);
+  if (!minimum || !cropped) return { ok: false, message: "Format de pochette inconnu." };
 
-  const [cropWidth, cropHeight] = croppedSize(width, height, ratio);
+  const [cropWidth, cropHeight] = cropped;
   if (cropWidth < minimum[0] || cropHeight < minimum[1]) {
     return {
       ok: false,
@@ -116,7 +126,10 @@ export function cropNotice(
   const source = width / height;
   if (Math.abs(source - target) / target <= CROP_TOLERANCE) return null;
 
-  const [cropWidth, cropHeight] = croppedSize(width, height, ratio);
+  const cropped = croppedSize(width, height, ratio);
+  if (!cropped) return null;
+
+  const [cropWidth, cropHeight] = cropped;
   const share =
     source > target ? 1 - cropWidth / width : 1 - cropHeight / height;
   const side = source > target ? "largeur" : "hauteur";

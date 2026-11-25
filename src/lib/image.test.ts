@@ -14,6 +14,10 @@ describe("croppedSize", () => {
   it("laisse une image déjà au bon rapport intacte", () => {
     expect(croppedSize(1440, 2560, "9:16")).toEqual([1440, 2560]);
   });
+
+  it("renvoie null sur un cadrage inconnu plutôt que de lever", () => {
+    expect(croppedSize(4000, 3000, "4:3")).toBeNull();
+  });
 });
 
 describe("checkFormatDimensions", () => {
